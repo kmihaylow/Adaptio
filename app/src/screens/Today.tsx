@@ -38,7 +38,12 @@ export default function Today() {
       <div className="mt" />
 
       {coachMsg && <div className="coach-note" onClick={() => setCoachMsg(null)}>🧠 {coachMsg}</div>}
-      {err && <div className="warning">⚠️ <span>{err}</span></div>}
+      {err && (
+        <>
+          <div className="warning">⚠️ <span>{err}</span></div>
+          <button className="btn mt" onClick={() => { setErr(""); load(); }}>Опитай отново</button>
+        </>
+      )}
 
       {today.length === 0 && !err && (
         <div className="card center">

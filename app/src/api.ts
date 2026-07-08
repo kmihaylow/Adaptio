@@ -1,22 +1,40 @@
 import type { Plan, Profile, Workout } from "./types";
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
-    ...init,
-  });
+  let r: Response;
+  try {
+    r = await fetch(path, {
+      headers: { "Content-Type": "application/json" },
+      ...init,
+    });
+  } catch {
+    throw new Error("Сървърът не отговаря — увери се, че backend-ът е стартиран (python -m adaptio.main).");
+  }
   if (!r.ok) {
     let detail = `Грешка ${r.status}`;
     try {
       const j = await r.json();
       if (j.detail) detail = typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail);
-    } catch {}
+    } catch {
+      if (r.status === 404)
+        detail = "Сървърът не намери ресурса — провери дали backend-ът работи на порт 8000.";
+      else if (r.status >= 500)
+        detail = "Вътрешна грешка на сървъра — провери конзолата на backend-а за детайли.";
+    }
     throw new Error(detail);
   }
   return r.json();
 }
 
 export const api = {
+  checkHealth: async () => {
+    try {
+      const r = await fetch("/api/health");
+      return r.ok;
+    } catch {
+      return false;
+    }
+  },
   getProfile: () => req<Profile>("/api/profile"),
   saveProfile: (p: Profile) =>
     req<{ saved: boolean; plan_weeks: number; warnings: string[] }>("/api/profile", {
