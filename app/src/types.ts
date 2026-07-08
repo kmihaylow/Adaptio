@@ -32,8 +32,35 @@ export interface Profile {
   weekly_hours: number;
   available_days: number[];
   experience_years: number;
+  currently_training: boolean;
   equipment: Equipment;
   goal: Goal;
+}
+
+export interface WeeklyProgress {
+  week: number;
+  phase: string;
+  planned: number;
+  done: number;
+  load_done: number;
+  load_planned: number;
+}
+
+export interface Dashboard {
+  current_week: number;
+  total_weeks: number;
+  phase: "base" | "build" | "peak" | "recovery" | "taper";
+  done: number;
+  skipped: number;
+  total: number;
+  missed: number;
+  weekly: WeeklyProgress[];
+  avg_rpe: number | null;
+  ratings_count: number;
+  focus: string[];
+  race: { name: string; date: string } | null;
+  days_to_race: number | null;
+  zones: Record<string, any>;
 }
 
 export interface Segment {
@@ -44,6 +71,19 @@ export interface Segment {
   high: number;
   cadence_rpm?: number | null;
   note?: string | null;
+}
+
+export interface ActualActivity {
+  activity_id: string;
+  date: string;
+  sport: "run" | "bike";
+  name: string | null;
+  moving_time_min: number;
+  distance_km: number | null;
+  avg_hr: number | null;
+  avg_watts: number | null;
+  pace_s_per_km: number | null;
+  load: number | null;
 }
 
 export interface Workout {
@@ -59,6 +99,8 @@ export interface Workout {
   segments: Segment[];
   status: "planned" | "done" | "skipped";
   load_hint: number;
+  actual?: ActualActivity | null;
+  rated?: boolean;
 }
 
 export interface PlanWeek {

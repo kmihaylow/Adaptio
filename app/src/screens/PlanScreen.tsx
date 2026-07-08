@@ -35,7 +35,12 @@ export default function PlanScreen() {
       .sort((a, b) => a.date.localeCompare(b.date));
   }, [plan, week]);
 
-  if (err) return <div className="screen"><div className="warning">⚠️ <span>{err}</span></div></div>;
+  if (err) return (
+    <div className="screen">
+      <div className="warning">⚠️ <span>{err}</span></div>
+      <button className="btn mt" onClick={() => { setErr(""); load(); }}>Опитай отново</button>
+    </div>
+  );
   if (!plan || week === null) return <div className="screen center"><span className="spin">⚙️</span></div>;
 
   const wk = plan.weeks.find((w) => w.number === week)!;

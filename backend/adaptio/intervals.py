@@ -55,6 +55,39 @@ class IntervalsClient:
             })
         return out
 
+    # -------------------------------------------- completed activities (т.3)
+
+    def activities(self, days: int = 14) -> list[dict]:
+        """Completed activities from the last `days`, as compact summaries.
+
+        Garmin uploads land here automatically, so pulling this list is the
+        zero-friction way to know what the athlete actually did."""
+        today = dt.date.today()
+        rows = self._get(f"/athlete/{self.athlete_id}/activities", {
+            "oldest": (today - dt.timedelta(days=days)).isoformat(),
+            "newest": (today + dt.timedelta(days=1)).isoformat(),
+        })
+        out = []
+        for a in rows:
+            kind = a.get("type") or ""
+            sport = "run" if "Run" in kind else "bike" if "Ride" in kind else None
+            if not sport:
+                continue
+            speed = a.get("average_speed")
+            out.append({
+                "activity_id": str(a.get("id")),
+                "date": (a.get("start_date_local") or "")[:10],
+                "sport": sport,
+                "name": a.get("name"),
+                "moving_time_min": round((a.get("moving_time") or 0) / 60),
+                "distance_km": round(a["distance"] / 1000, 2) if a.get("distance") else None,
+                "avg_hr": a.get("average_heartrate"),
+                "avg_watts": a.get("icu_average_watts") or a.get("average_watts"),
+                "pace_s_per_km": round(1000 / speed) if sport == "run" and speed else None,
+                "load": a.get("icu_training_load"),
+            })
+        return out
+
     # ------------------------------------------------- push workouts (т.11)
 
     def push_workout(self, date: dt.date, name: str, sport: str,

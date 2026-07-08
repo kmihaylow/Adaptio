@@ -18,12 +18,15 @@ app/ (React+Vite PWA, Bulgarian UI)
          ├── coach.py                    — Claude weekly review (compact digest, structured output)
          ├── intervals.py                — intervals.icu client (wellness in, workouts out → Garmin)
          ├── zwo.py                      — .zwo export for power-based bike workouts
-         ├── db.py                       — SQLite; user_id everywhere for future multi-user
+         ├── auth.py                     — session auth (pbkdf2 + bearer tokens in SQLite)
+         ├── db.py                       — SQLite; every query scoped by user_id
          └── api.py                      — HTTP endpoints
 ```
 
 - `python -m adaptio.main` runs uvicorn on :8000; `npm run dev` in `app/` on :5173.
-- Single local user for now (`db.USER = "local"`); schema is multi-user ready.
+- Multi-user with username/password login (open registration, meant for a handful
+  of trusted users). Everything except /api/health and /api/auth/* requires a
+  Bearer token. Swap for Supabase/FastAPI-Users when real tenancy lands.
 
 ## Coaching methodology (do not change without asking Kiril)
 
@@ -58,11 +61,13 @@ prompts.
 
 ## Roadmap (next steps, in order)
 
-1. Auth + multi-user (Supabase or FastAPI-Users), then hosted deploy (Fly.io/Railway + Netlify).
+1. Hosted deploy (Fly.io/Railway + Netlify); upgrade session auth to Supabase/FastAPI-Users.
 2. Capacitor wrap of `app/` for App Store / Google Play.
-3. Auto-import completed activities from intervals.icu to mark workouts done + compare planned/actual.
-4. Direct Garmin Connect Developer Program integration (application pending — Garmin paused new requests mid-2026).
-5. Stripe subscriptions (€5/mo founding price).
+3. ~~Auto-import completed activities from intervals.icu~~ done: activity_sync.py,
+   POST /api/sync/activities, auto-runs on dashboard load.
+4. Strength workouts (sport-specific, demo links) — proposal in docs/.
+5. Direct Garmin Connect Developer Program integration (application pending — Garmin paused new requests mid-2026).
+6. Stripe subscriptions (€5/mo founding price).
 
 ## Testing locally
 

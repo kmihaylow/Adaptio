@@ -118,7 +118,7 @@ def generate_run_plan(profile: Profile) -> Plan:
     workouts: list[Workout] = []
 
     for w in range(1, total_weeks + 1):
-        phase = phase_for_week(w, total_weeks, has_race)
+        phase = phase_for_week(w, total_weeks, has_race, profile.currently_training)
         hours = week_hours(profile, w, total_weeks, phase) * run_share
         minutes = round(hours * 60)
         n_runs = max(2, min(6, round(minutes / 50)))

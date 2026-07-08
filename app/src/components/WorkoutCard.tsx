@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Workout } from "../types";
-import { segmentTarget } from "../api";
+import { fmtPace, segmentTarget } from "../api";
 
 const SEG_COLOR: Record<string, string> = {
   warmup: "#4cc9f0",
@@ -69,6 +69,15 @@ export default function WorkoutCard({
         ))}
       </div>
       <p className="wo-desc">{wo.description}</p>
+      {wo.actual && (
+        <p className="wo-desc" style={{ color: "#6ede8a", marginTop: 6 }}>
+          📥 Реално ({wo.actual.name ?? "от Garmin"}): {wo.actual.moving_time_min} мин
+          {wo.actual.distance_km ? ` · ${wo.actual.distance_km} км` : ""}
+          {wo.actual.pace_s_per_km ? ` · ${fmtPace(wo.actual.pace_s_per_km)}/км` : ""}
+          {wo.actual.avg_watts ? ` · ${Math.round(wo.actual.avg_watts)}W` : ""}
+          {wo.actual.avg_hr ? ` · ${Math.round(wo.actual.avg_hr)} уд/мин` : ""}
+        </p>
+      )}
       {open && (
         <ul className="seg-list">
           {wo.segments.map((s, i) => (
@@ -82,17 +91,30 @@ export default function WorkoutCard({
         </ul>
       )}
       {(onRate || onSkip) && wo.status === "planned" && (
-        <div style={{ display: "flex", gap: 8, marginTop: 12 }} onClick={(e) => e.stopPropagation()}>
-          {onRate && (
-            <button className="btn small" onClick={() => onRate(wo)}>
-              ✓ Направих я — оцени
-            </button>
-          )}
-          {onSkip && (
-            <button className="btn small ghost" onClick={() => onSkip(wo)}>
-              Пропускам
-            </button>
-          )}
+        wo.date <= new Date().toLocaleDateString("sv-SE") ? (
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }} onClick={(e) => e.stopPropagation()}>
+            {onRate && (
+              <button className="btn small" onClick={() => onRate(wo)}>
+                ✓ Направих я — оцени
+              </button>
+            )}
+            {onSkip && (
+              <button className="btn small ghost" onClick={() => onSkip(wo)}>
+                Пропускам
+              </button>
+            )}
+          </div>
+        ) : (
+          <p className="hint" style={{ marginTop: 10 }}>
+            🔒 Ще можеш да я отбележиш в деня на тренировката.
+          </p>
+        )
+      )}
+      {onRate && wo.status === "done" && wo.actual && !wo.rated && (
+        <div style={{ marginTop: 12 }} onClick={(e) => e.stopPropagation()}>
+          <button className="btn small" onClick={() => onRate(wo)}>
+            💬 Как беше? Оцени я
+          </button>
         </div>
       )}
     </div>

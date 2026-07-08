@@ -108,6 +108,7 @@ class Profile(BaseModel):
     available_days: list[int] = Field(default_factory=lambda: [0, 1, 3, 5, 6])  # 0=Mon
     # Context
     experience_years: float = 0
+    currently_training: bool = False  # already training regularly right now?
     equipment: Equipment = Field(default_factory=Equipment)
     goal: Goal = Field(default_factory=Goal)
 
@@ -151,6 +152,7 @@ class Workout(BaseModel):
     segments: list[Segment] = Field(default_factory=list)
     status: str = "planned"           # planned | done | skipped
     load_hint: int = 0                # rough TSS-like number for progress charts
+    actual: Optional[dict] = None     # synced intervals.icu activity summary
 
 
 class WorkoutRating(BaseModel):
