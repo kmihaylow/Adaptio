@@ -1,0 +1,10 @@
+{
+  "name": "Adaptio",
+  "short_name": "Adaptio",
+  "description": "Адаптивен AI треньор за бягане и колоездене",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0c0e13",
+  "theme_color": "#0c0e13",
+  "icons": []
+}
