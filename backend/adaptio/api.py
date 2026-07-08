@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
-from . import adaptation, auth, coach, db, zwo
+from . import activity_sync, adaptation, auth, coach, db, zwo
 from .auth import current_user
 from .intervals import IntervalsClient, workout_to_intervals_text
 from .models import Profile, WorkoutRating
@@ -320,6 +320,36 @@ def workout_zwo(workout_id: int, user: str = Depends(current_user)):
     return zwo.to_zwo(wo)
 
 
+# ------------------------------------------------------- activity auto-sync
+
+@app.post("/api/sync/activities")
+def sync_activities(user: str = Depends(current_user)):
+    """Pull recent completed activities from intervals.icu and tick off the
+    matching planned workouts, storing a compact plan-vs-actual summary."""
+    creds = db.load_integration(user, "intervals")
+    if not creds:
+        raise HTTPException(400, "intervals.icu не е свързан.")
+    row = db.active_plan(user)
+    if not row:
+        raise HTTPException(404, "Няма активен план.")
+    _, meta, workouts = row
+    workouts = _with_dates(meta, workouts)
+    client = IntervalsClient(creds["api_key"], creds["athlete_id"])
+    try:
+        acts = client.activities()
+    except Exception:
+        raise HTTPException(502, "intervals.icu не отговори — опитай пак по-късно.")
+    pairs = activity_sync.match_activities(workouts, acts)
+    for wo, act in pairs:
+        wo["actual"] = act
+        db.update_workout(wo["id"], data=wo, status="done")
+    return {
+        "synced": len(pairs),
+        "matched": [{"workout_id": w["id"], "workout": w["name"],
+                     "activity": a["name"], "date": a["date"]} for w, a in pairs],
+    }
+
+
 # ------------------------------------------------------------- intervals.icu
 
 class IntervalsCreds(BaseModel):
@@ -393,6 +423,9 @@ def weekly_review(body: ReviewRequest, user: str = Depends(current_user)):
         "zones": {k: v for k, v in meta.get("zones", {}).items()
                   if k in ("vdot", "ftp_w", "max_hr_bpm")},
     }
+    actuals = activity_sync.actuals_digest(workouts)
+    if actuals:
+        digest["plan_vs_actual"] = actuals
     wellness = None
     creds = db.load_integration(user, "intervals")
     if creds:

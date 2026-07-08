@@ -73,6 +73,19 @@ export interface Segment {
   note?: string | null;
 }
 
+export interface ActualActivity {
+  activity_id: string;
+  date: string;
+  sport: "run" | "bike";
+  name: string | null;
+  moving_time_min: number;
+  distance_km: number | null;
+  avg_hr: number | null;
+  avg_watts: number | null;
+  pace_s_per_km: number | null;
+  load: number | null;
+}
+
 export interface Workout {
   id: number;
   plan_week: number;
@@ -86,6 +99,8 @@ export interface Workout {
   segments: Segment[];
   status: "planned" | "done" | "skipped";
   load_hint: number;
+  actual?: ActualActivity | null;
+  rated?: boolean;
 }
 
 export interface PlanWeek {

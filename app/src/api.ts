@@ -92,6 +92,10 @@ export const api = {
       body: JSON.stringify({ api_key, athlete_id }),
     }),
   intervalsStatus: () => req<{ connected: boolean }>("/api/integrations/intervals"),
+  syncActivities: () =>
+    req<{ synced: number; matched: { workout: string; activity: string; date: string }[] }>(
+      "/api/sync/activities", { method: "POST" },
+    ),
   pushWeek: (week: number) =>
     req<{ pushed: number }>(`/api/integrations/intervals/push-week/${week}`, { method: "POST" }),
   coachReview: (note: string) =>

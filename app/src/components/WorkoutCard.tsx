@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Workout } from "../types";
-import { segmentTarget } from "../api";
+import { fmtPace, segmentTarget } from "../api";
 
 const SEG_COLOR: Record<string, string> = {
   warmup: "#4cc9f0",
@@ -69,6 +69,15 @@ export default function WorkoutCard({
         ))}
       </div>
       <p className="wo-desc">{wo.description}</p>
+      {wo.actual && (
+        <p className="wo-desc" style={{ color: "#6ede8a", marginTop: 6 }}>
+          📥 Реално ({wo.actual.name ?? "от Garmin"}): {wo.actual.moving_time_min} мин
+          {wo.actual.distance_km ? ` · ${wo.actual.distance_km} км` : ""}
+          {wo.actual.pace_s_per_km ? ` · ${fmtPace(wo.actual.pace_s_per_km)}/км` : ""}
+          {wo.actual.avg_watts ? ` · ${Math.round(wo.actual.avg_watts)}W` : ""}
+          {wo.actual.avg_hr ? ` · ${Math.round(wo.actual.avg_hr)} уд/мин` : ""}
+        </p>
+      )}
       {open && (
         <ul className="seg-list">
           {wo.segments.map((s, i) => (
@@ -100,6 +109,13 @@ export default function WorkoutCard({
             🔒 Ще можеш да я отбележиш в деня на тренировката.
           </p>
         )
+      )}
+      {onRate && wo.status === "done" && wo.actual && !wo.rated && (
+        <div style={{ marginTop: 12 }} onClick={(e) => e.stopPropagation()}>
+          <button className="btn small" onClick={() => onRate(wo)}>
+            💬 Как беше? Оцени я
+          </button>
+        </div>
       )}
     </div>
   );

@@ -65,6 +65,17 @@ export default function Settings({ onReset, onLogout }: { onReset: () => void; o
     setBusy(false);
   }
 
+  async function pull() {
+    setBusy(true); setMsg("");
+    try {
+      const r = await api.syncActivities();
+      setMsg(r.synced === 0
+        ? "Няма нови завършени тренировки за отбелязване."
+        : `✅ ${r.synced} ${r.synced === 1 ? "тренировка е отбелязана" : "тренировки са отбелязани"}: ${r.matched.map((m) => `${m.workout} (${m.date})`).join(", ")}`);
+    } catch (e: any) { setMsg(`❌ ${e.message}`); }
+    setBusy(false);
+  }
+
   async function doReview() {
     setBusy(true); setMsg(""); setReview(null);
     try {
@@ -114,9 +125,14 @@ export default function Settings({ onReset, onLogout }: { onReset: () => void; o
             <button className="btn" disabled={!apiKey || !athleteId || busy} onClick={connect}>Свържи</button>
           </>
         ) : (
-          <button className="btn ghost" disabled={busy} onClick={push}>
-            📤 Качи текущата седмица в календара
-          </button>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <button className="btn ghost" disabled={busy} onClick={push}>
+              📤 Качи текущата седмица в календара
+            </button>
+            <button className="btn ghost" disabled={busy} onClick={pull}>
+              📥 Изтегли завършените тренировки
+            </button>
+          </div>
         )}
       </div>
 

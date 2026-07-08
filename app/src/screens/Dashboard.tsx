@@ -9,8 +9,16 @@ const PHASE_BG: Record<string, string> = {
 export default function Dashboard() {
   const [d, setD] = useState<Dash | null>(null);
   const [err, setErr] = useState("");
+  const [syncMsg, setSyncMsg] = useState("");
 
   async function load() {
+    // best-effort auto-import from intervals.icu before reading the stats;
+    // fails silently when the integration isn't connected
+    try {
+      const s = await api.syncActivities();
+      if (s.synced > 0)
+        setSyncMsg(`📥 ${s.synced} ${s.synced === 1 ? "тренировка е отбелязана" : "тренировки са отбелязани"} автоматично от Garmin.`);
+    } catch {}
     try { setD(await api.dashboard()); } catch (e: any) { setErr(e.message); }
   }
   useEffect(() => { load(); }, []);
@@ -36,6 +44,8 @@ export default function Dashboard() {
           <> · 🏁 {d.race?.name}: след {d.days_to_race} дни</>
         )}
       </p>
+
+      {syncMsg && <div className="coach-note mt" onClick={() => setSyncMsg("")}>{syncMsg}</div>}
 
       <div className="stat-row mt">
         <div className="stat"><div className="v">{pct}%</div><div className="l">изпълнение</div></div>

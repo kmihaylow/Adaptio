@@ -149,14 +149,16 @@ def active_plan(user_id: str) -> tuple[int, dict, list[dict]] | None:
             "ORDER BY id DESC LIMIT 1", (user_id,)).fetchone()
         if not row:
             return None
-        wos = c.execute("SELECT id, data, status FROM workouts WHERE plan_id=? ORDER BY id",
-                        (row["id"],)).fetchall()
+        wos = c.execute(
+            "SELECT id, data, status, "
+            "EXISTS(SELECT 1 FROM ratings r WHERE r.workout_id = workouts.id) AS rated "
+            "FROM workouts WHERE plan_id=? ORDER BY id", (row["id"],)).fetchall()
     meta = json.loads(row["meta"])
     meta["created_at"] = row["created_at"]
     workouts = []
     for w in wos:
         d = json.loads(w["data"])
-        d["id"], d["status"] = w["id"], w["status"]
+        d["id"], d["status"], d["rated"] = w["id"], w["status"], bool(w["rated"])
         workouts.append(d)
     return row["id"], meta, workouts
 
@@ -180,7 +182,9 @@ def get_workout(user_id: str, workout_id: int) -> dict | None:
 def update_workout(workout_id: int, data: dict | None = None, status: str | None = None) -> None:
     with conn() as c:
         if data is not None:
-            clean = {k: v for k, v in data.items() if k not in ("status", "plan_created")}
+            # strip keys that are stored elsewhere or recomputed on every read
+            clean = {k: v for k, v in data.items()
+                     if k not in ("status", "plan_created", "rated")}
             c.execute("UPDATE workouts SET data=? WHERE id=?", (json.dumps(clean), workout_id))
         if status is not None:
             c.execute("UPDATE workouts SET status=? WHERE id=?", (status, workout_id))

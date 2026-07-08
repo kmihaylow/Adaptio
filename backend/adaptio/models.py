@@ -152,6 +152,7 @@ class Workout(BaseModel):
     segments: list[Segment] = Field(default_factory=list)
     status: str = "planned"           # planned | done | skipped
     load_hint: int = 0                # rough TSS-like number for progress charts
+    actual: Optional[dict] = None     # synced intervals.icu activity summary
 
 
 class WorkoutRating(BaseModel):

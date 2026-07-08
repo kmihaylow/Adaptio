@@ -61,11 +61,13 @@ prompts.
 
 ## Roadmap (next steps, in order)
 
-1. Auth + multi-user (Supabase or FastAPI-Users), then hosted deploy (Fly.io/Railway + Netlify).
+1. Hosted deploy (Fly.io/Railway + Netlify); upgrade session auth to Supabase/FastAPI-Users.
 2. Capacitor wrap of `app/` for App Store / Google Play.
-3. Auto-import completed activities from intervals.icu to mark workouts done + compare planned/actual.
-4. Direct Garmin Connect Developer Program integration (application pending — Garmin paused new requests mid-2026).
-5. Stripe subscriptions (€5/mo founding price).
+3. ~~Auto-import completed activities from intervals.icu~~ done: activity_sync.py,
+   POST /api/sync/activities, auto-runs on dashboard load.
+4. Strength workouts (sport-specific, demo links) — proposal in docs/.
+5. Direct Garmin Connect Developer Program integration (application pending — Garmin paused new requests mid-2026).
+6. Stripe subscriptions (€5/mo founding price).
 
 ## Testing locally
 
