@@ -52,8 +52,11 @@ def plan_length_weeks(goal: Goal, today: dt.date | None = None) -> tuple[int, li
     return weeks, warnings
 
 
-def phase_for_week(week: int, total: int, has_race: bool) -> str:
-    """base → build → peak → taper, recovery every 4th week (not in taper)."""
+def phase_for_week(week: int, total: int, has_race: bool, trained: bool = False) -> str:
+    """base → build → peak → taper, recovery every 4th week (not in taper).
+
+    Athletes who already train regularly need less base (re-)building, so their
+    base phase is shorter and quality work starts earlier."""
     taper_weeks = 0
     if has_race:
         taper_weeks = 1 if total <= 10 else 2
@@ -62,7 +65,8 @@ def phase_for_week(week: int, total: int, has_race: bool) -> str:
     if week % 4 == 0 and week < total - taper_weeks:
         return "recovery"
     working = total - taper_weeks
-    if week <= max(1, round(working * 0.4)):
+    base_share = 0.25 if trained else 0.4
+    if week <= max(1, round(working * base_share)):
         return "base"
     if week <= max(2, round(working * 0.75)):
         return "build"
@@ -74,9 +78,12 @@ def week_hours(profile: Profile, week: int, total: int, phase: str) -> float:
 
     Recovery weeks drop to ~65%, taper to ~55% of the athlete's budget — enough
     stimulus to hold fitness while fatigue drains (Mujika & Padilla, 2003).
+    Athletes already training regularly skip the cautious ramp-in and start
+    near their full budget.
     """
     budget = profile.weekly_hours
-    base = min(budget, budget * 0.8 * (1.08 ** (week - 1)))
+    start = 0.92 if profile.currently_training else 0.8
+    base = min(budget, budget * start * (1.08 ** (week - 1)))
     if phase == "recovery":
         return round(budget * 0.65, 1)
     if phase == "taper":

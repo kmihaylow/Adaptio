@@ -95,7 +95,8 @@ h2 { font-size: 1.15rem; font-weight: 700; margin-bottom: 10px; }
 /* form */
 .field { margin-bottom: 16px; }
 .field label { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: .92rem; margin-bottom: 7px; }
-.field input[type="number"], .field input[type="text"], .field input[type="date"], .field select {
+.field input[type="number"], .field input[type="text"], .field input[type="date"],
+.field input[type="password"], .field select {
   width: 100%;
   background: var(--card);
   border: 1.5px solid var(--line);

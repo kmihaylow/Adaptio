@@ -82,18 +82,24 @@ export default function WorkoutCard({
         </ul>
       )}
       {(onRate || onSkip) && wo.status === "planned" && (
-        <div style={{ display: "flex", gap: 8, marginTop: 12 }} onClick={(e) => e.stopPropagation()}>
-          {onRate && (
-            <button className="btn small" onClick={() => onRate(wo)}>
-              ✓ Направих я — оцени
-            </button>
-          )}
-          {onSkip && (
-            <button className="btn small ghost" onClick={() => onSkip(wo)}>
-              Пропускам
-            </button>
-          )}
-        </div>
+        wo.date <= new Date().toLocaleDateString("sv-SE") ? (
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }} onClick={(e) => e.stopPropagation()}>
+            {onRate && (
+              <button className="btn small" onClick={() => onRate(wo)}>
+                ✓ Направих я — оцени
+              </button>
+            )}
+            {onSkip && (
+              <button className="btn small ghost" onClick={() => onSkip(wo)}>
+                Пропускам
+              </button>
+            )}
+          </div>
+        ) : (
+          <p className="hint" style={{ marginTop: 10 }}>
+            🔒 Ще можеш да я отбележиш в деня на тренировката.
+          </p>
+        )
       )}
     </div>
   );

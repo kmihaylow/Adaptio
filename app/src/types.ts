@@ -32,8 +32,35 @@ export interface Profile {
   weekly_hours: number;
   available_days: number[];
   experience_years: number;
+  currently_training: boolean;
   equipment: Equipment;
   goal: Goal;
+}
+
+export interface WeeklyProgress {
+  week: number;
+  phase: string;
+  planned: number;
+  done: number;
+  load_done: number;
+  load_planned: number;
+}
+
+export interface Dashboard {
+  current_week: number;
+  total_weeks: number;
+  phase: "base" | "build" | "peak" | "recovery" | "taper";
+  done: number;
+  skipped: number;
+  total: number;
+  missed: number;
+  weekly: WeeklyProgress[];
+  avg_rpe: number | null;
+  ratings_count: number;
+  focus: string[];
+  race: { name: string; date: string } | null;
+  days_to_race: number | null;
+  zones: Record<string, any>;
 }
 
 export interface Segment {

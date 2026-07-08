@@ -18,12 +18,15 @@ app/ (React+Vite PWA, Bulgarian UI)
          ├── coach.py                    — Claude weekly review (compact digest, structured output)
          ├── intervals.py                — intervals.icu client (wellness in, workouts out → Garmin)
          ├── zwo.py                      — .zwo export for power-based bike workouts
-         ├── db.py                       — SQLite; user_id everywhere for future multi-user
+         ├── auth.py                     — session auth (pbkdf2 + bearer tokens in SQLite)
+         ├── db.py                       — SQLite; every query scoped by user_id
          └── api.py                      — HTTP endpoints
 ```
 
 - `python -m adaptio.main` runs uvicorn on :8000; `npm run dev` in `app/` on :5173.
-- Single local user for now (`db.USER = "local"`); schema is multi-user ready.
+- Multi-user with username/password login (open registration, meant for a handful
+  of trusted users). Everything except /api/health and /api/auth/* requires a
+  Bearer token. Swap for Supabase/FastAPI-Users when real tenancy lands.
 
 ## Coaching methodology (do not change without asking Kiril)
 

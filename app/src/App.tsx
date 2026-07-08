@@ -1,31 +1,34 @@
 import { useEffect, useState } from "react";
+import Login from "./screens/Login";
 import Onboarding from "./screens/Onboarding";
+import Dashboard from "./screens/Dashboard";
 import Today from "./screens/Today";
 import PlanScreen from "./screens/PlanScreen";
 import Settings from "./screens/Settings";
-import { api } from "./api";
+import { api, clearToken, getToken } from "./api";
 
-type Tab = "today" | "plan" | "settings";
+type Tab = "progress" | "today" | "plan" | "settings";
 
 export default function App() {
-  const [ready, setReady] = useState<boolean | null>(null); // null = loading
+  // null = loading, "login" = needs auth, "onboarding" = no plan yet, "app" = ready
+  const [stage, setStage] = useState<"loading" | "login" | "onboarding" | "app">("loading");
   const [backendDown, setBackendDown] = useState(false);
-  const [tab, setTab] = useState<Tab>("today");
+  const [tab, setTab] = useState<Tab>("progress");
 
   function boot() {
-    setReady(null);
+    setStage("loading");
     setBackendDown(false);
     api.checkHealth().then((ok) => {
-      if (!ok) { setBackendDown(true); setReady(false); return; }
-      api.getPlan().then(() => setReady(true)).catch(() => setReady(false));
+      if (!ok) { setBackendDown(true); return; }
+      if (!getToken()) { setStage("login"); return; }
+      api.getPlan()
+        .then(() => setStage("app"))
+        .catch(() => setStage(getToken() ? "onboarding" : "login"));
     });
   }
 
   useEffect(boot, []);
 
-  if (ready === null) {
-    return <div className="screen center" style={{ paddingTop: "40vh" }}><span className="spin">⚙️</span></div>;
-  }
   if (backendDown) {
     return (
       <div className="screen center" style={{ paddingTop: "30vh" }}>
@@ -39,16 +42,31 @@ export default function App() {
       </div>
     );
   }
-  if (!ready) {
-    return <Onboarding onComplete={() => { setReady(true); setTab("plan"); }} />;
+  if (stage === "loading") {
+    return <div className="screen center" style={{ paddingTop: "40vh" }}><span className="spin">⚙️</span></div>;
+  }
+  if (stage === "login") {
+    return <Login onLogin={boot} />;
+  }
+  if (stage === "onboarding") {
+    return <Onboarding onComplete={() => { setStage("app"); setTab("plan"); }} />;
   }
 
   return (
     <>
+      {tab === "progress" && <Dashboard />}
       {tab === "today" && <Today />}
       {tab === "plan" && <PlanScreen />}
-      {tab === "settings" && <Settings onReset={() => setReady(false)} />}
+      {tab === "settings" && (
+        <Settings
+          onReset={() => setStage("onboarding")}
+          onLogout={() => { api.logout().catch(() => {}); clearToken(); setStage("login"); }}
+        />
+      )}
       <nav className="nav">
+        <button className={tab === "progress" ? "on" : ""} onClick={() => setTab("progress")}>
+          <span className="ic">📈</span>Прогрес
+        </button>
         <button className={tab === "today" ? "on" : ""} onClick={() => setTab("today")}>
           <span className="ic">🎯</span>Днес
         </button>

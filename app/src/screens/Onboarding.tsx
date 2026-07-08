@@ -15,7 +15,7 @@ type Draft = {
   age: string; sex: "male" | "female"; weight: string;
   maxHr: string; restingHr: string; vo2max: string; ftp: string; lthr: string;
   raceDist: string; raceMin: string; raceSec: string;
-  weeklyHours: number; days: number[];
+  weeklyHours: number; days: number[]; currentlyTraining: boolean;
   hasRace: boolean; raceName: string; raceDate: string; weeks: number;
   runGoalType: string; runDistance: string; targetH: string; targetM: string; targetS: string;
   paceM: string; paceS: string; bikeGoalType: string;
@@ -26,7 +26,7 @@ const init: Draft = {
   sport: null, age: "", sex: "male", weight: "",
   maxHr: "", restingHr: "", vo2max: "", ftp: "", lthr: "",
   raceDist: "", raceMin: "", raceSec: "",
-  weeklyHours: 5, days: [0, 2, 4, 6],
+  weeklyHours: 5, days: [0, 2, 4, 6], currentlyTraining: false,
   hasRace: false, raceName: "", raceDate: "", weeks: 8,
   runGoalType: "race_time", runDistance: "10k", targetH: "0", targetM: "50", targetS: "0",
   paceM: "5", paceS: "30", bikeGoalType: "ftp",
@@ -79,6 +79,7 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
       weekly_hours: d.weeklyHours,
       available_days: d.days,
       experience_years: 0,
+      currently_training: d.currentlyTraining,
       equipment: d.eq,
       goal: {
         run_goal_type: isRun ? (d.runGoalType as any) : null,
@@ -238,6 +239,19 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
 
       {step === 4 && (
         <>
+          <h2>Тренираш ли редовно в момента?</h2>
+          <div className="opts cols2" style={{ marginBottom: 14 }}>
+            <button className={`opt ${d.currentlyTraining ? "selected" : ""}`}
+              onClick={() => set({ currentlyTraining: true })}>
+              <span className="t">💪 Да, тренирам</span>
+              <span className="d">Планът започва по-смело, с по-кратка базова фаза</span>
+            </button>
+            <button className={`opt ${!d.currentlyTraining ? "selected" : ""}`}
+              onClick={() => set({ currentlyTraining: false })}>
+              <span className="t">🌱 Не / отскоро</span>
+              <span className="d">Плавно навлизане — обемът се вдига постепенно</span>
+            </button>
+          </div>
           <h2>Колко време имаш седмично?</h2>
           <div className="card center">
             <div style={{ fontSize: "2.2rem", fontWeight: 800 }}>{d.weeklyHours} ч</div>

@@ -1,14 +1,29 @@
-import type { Plan, Profile, Workout } from "./types";
+import type { Dashboard, Plan, Profile, Workout } from "./types";
+
+const TOKEN_KEY = "adaptio_token";
+export const getToken = () => localStorage.getItem(TOKEN_KEY);
+export const setToken = (t: string) => localStorage.setItem(TOKEN_KEY, t);
+export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getToken();
   let r: Response;
   try {
     r = await fetch(path, {
-      headers: { "Content-Type": "application/json" },
       ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...init?.headers,
+      },
     });
   } catch {
     throw new Error("Сървърът не отговаря — увери се, че backend-ът е стартиран (python -m adaptio.main).");
+  }
+  if (r.status === 401 && token && !path.startsWith("/api/auth/")) {
+    // stale session: drop the token and land back on the login screen
+    clearToken();
+    window.location.reload();
   }
   if (!r.ok) {
     let detail = `Грешка ${r.status}`;
@@ -35,6 +50,24 @@ export const api = {
       return false;
     }
   },
+  register: (username: string, password: string) =>
+    req<{ token: string; username: string }>("/api/auth/register", {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+    }),
+  login: (username: string, password: string) =>
+    req<{ token: string; username: string }>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+    }),
+  logout: () => req<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
+  me: () => req<{ user_id: string }>("/api/auth/me"),
+  dashboard: () => req<Dashboard>("/api/dashboard"),
+  updateMetrics: (m: Record<string, number | null>) =>
+    req<{ saved: boolean; zones: Record<string, any> }>("/api/profile/metrics", {
+      method: "POST",
+      body: JSON.stringify(m),
+    }),
   getProfile: () => req<Profile>("/api/profile"),
   saveProfile: (p: Profile) =>
     req<{ saved: boolean; plan_weeks: number; warnings: string[] }>("/api/profile", {

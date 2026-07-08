@@ -1,7 +1,16 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 
-export default function Settings({ onReset }: { onReset: () => void }) {
+const METRIC_FIELDS = [
+  ["ftp_w", "FTP (вата)", "напр. 210"],
+  ["vo2max", "VO₂max", "напр. 45"],
+  ["max_hr_bpm", "Макс. пулс (уд/мин)", "напр. 185"],
+  ["lthr_bpm", "LTHR (уд/мин)", "напр. 168"],
+  ["resting_hr_bpm", "Пулс в покой", "напр. 55"],
+  ["weight_kg", "Тегло (кг)", "напр. 78"],
+] as const;
+
+export default function Settings({ onReset, onLogout }: { onReset: () => void; onLogout: () => void }) {
   const [connected, setConnected] = useState(false);
   const [apiKey, setApiKey] = useState("");
   const [athleteId, setAthleteId] = useState("");
@@ -9,10 +18,30 @@ export default function Settings({ onReset }: { onReset: () => void }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
   const [review, setReview] = useState<{ assessment: string; advice: string } | null>(null);
+  const [metrics, setMetrics] = useState<Record<string, string>>({});
+  const [metricsMsg, setMetricsMsg] = useState("");
 
   useEffect(() => {
     api.intervalsStatus().then((r) => setConnected(r.connected)).catch(() => {});
+    api.getProfile().then((p: any) => {
+      const m: Record<string, string> = {};
+      for (const [key] of METRIC_FIELDS) m[key] = p[key] != null ? String(p[key]) : "";
+      setMetrics(m);
+    }).catch(() => {});
   }, []);
+
+  async function saveMetrics() {
+    setBusy(true); setMetricsMsg("");
+    try {
+      const body: Record<string, number | null> = {};
+      for (const [key] of METRIC_FIELDS) {
+        if (metrics[key] !== "" && !isNaN(+metrics[key])) body[key] = +metrics[key];
+      }
+      await api.updateMetrics(body);
+      setMetricsMsg("✅ Записано! Зоните са преизчислени. Темповите цели в текущите тренировки се обновяват при следващо генериране на план.");
+    } catch (e: any) { setMetricsMsg(`❌ ${e.message}`); }
+    setBusy(false);
+  }
 
   async function connect() {
     setBusy(true); setMsg("");
@@ -50,6 +79,23 @@ export default function Settings({ onReset }: { onReset: () => void }) {
       <h1>Настройки</h1>
 
       <div className="card mt">
+        <h2>💪 Физиология</h2>
+        <p className="sub" style={{ marginBottom: 12 }}>
+          Нов FTP тест, нов макс. пулс от състезание? Обнови стойностите тук по всяко време —
+          зоните се преизчисляват веднага.
+        </p>
+        {METRIC_FIELDS.map(([key, label, ph]) => (
+          <div className="field" key={key}>
+            <label>{label}</label>
+            <input type="number" inputMode="decimal" value={metrics[key] ?? ""}
+              onChange={(e) => setMetrics({ ...metrics, [key]: e.target.value })} placeholder={ph} />
+          </div>
+        ))}
+        <button className="btn" disabled={busy} onClick={saveMetrics}>Запази стойностите</button>
+        {metricsMsg && <p className="hint mt">{metricsMsg}</p>}
+      </div>
+
+      <div className="card">
         <h2>🔗 intervals.icu {connected && <span className="badge done">свързано</span>}</h2>
         <p className="sub" style={{ marginBottom: 12 }}>
           Мостът към Garmin: часовникът ти синхронизира тренировки и възстановяване към intervals.icu,
@@ -100,7 +146,12 @@ export default function Settings({ onReset }: { onReset: () => void }) {
         <button className="btn ghost" onClick={onReset}>Редактирай профила и генерирай нов план</button>
       </div>
 
-      <p className="sub center mt">Adaptio v0.2 · направено с ❤️ и наука</p>
+      <div className="card">
+        <h2>👤 Профил</h2>
+        <button className="btn ghost" onClick={onLogout}>Излез от профила</button>
+      </div>
+
+      <p className="sub center mt">Adaptio v0.3 · направено с ❤️ и наука</p>
     </div>
   );
 }
