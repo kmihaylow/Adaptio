@@ -1,0 +1,14 @@
+# Render.com Blueprint — deploys the Adaptio API straight from GitHub.
+# In Render: New → Blueprint → pick this repo → Apply.
+services:
+  - type: web
+    name: adaptio-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn adaptio.api:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      # Optional: set ANTHROPIC_API_KEY in the Render dashboard for the AI weekly review.

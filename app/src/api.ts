@@ -1,0 +1,71 @@
+import type { Plan, Profile, Workout } from "./types";
+
+async function req<T>(path: string, init?: RequestInit): Promise<T> {
+  const r = await fetch(path, {
+    headers: { "Content-Type": "application/json" },
+    ...init,
+  });
+  if (!r.ok) {
+    let detail = `Грешка ${r.status}`;
+    try {
+      const j = await r.json();
+      if (j.detail) detail = typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail);
+    } catch {}
+    throw new Error(detail);
+  }
+  return r.json();
+}
+
+export const api = {
+  getProfile: () => req<Profile>("/api/profile"),
+  saveProfile: (p: Profile) =>
+    req<{ saved: boolean; plan_weeks: number; warnings: string[] }>("/api/profile", {
+      method: "POST",
+      body: JSON.stringify(p),
+    }),
+  generatePlan: () =>
+    req<{ plan_id: number; weeks: number; warnings: string[] }>("/api/plan/generate", { method: "POST" }),
+  getPlan: () => req<Plan>("/api/plan"),
+  today: () =>
+    req<{ today: Workout[]; upcoming: Workout[]; zones: Record<string, any> }>("/api/workouts/today"),
+  setStatus: (id: number, status: string) =>
+    req(`/api/workouts/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }),
+  rate: (id: number, rpe: number, feel: string, comment?: string) =>
+    req<{ ok: boolean; coach_message: string | null; adjusted_workouts: number }>(
+      `/api/workouts/${id}/rating`,
+      { method: "POST", body: JSON.stringify({ rpe, feel, comment }) },
+    ),
+  connectIntervals: (api_key: string, athlete_id: string) =>
+    req<{ connected: boolean }>("/api/integrations/intervals", {
+      method: "POST",
+      body: JSON.stringify({ api_key, athlete_id }),
+    }),
+  intervalsStatus: () => req<{ connected: boolean }>("/api/integrations/intervals"),
+  pushWeek: (week: number) =>
+    req<{ pushed: number }>(`/api/integrations/intervals/push-week/${week}`, { method: "POST" }),
+  coachReview: (note: string) =>
+    req<{ assessment: string; advice: string; adjusted_workouts: number }>("/api/coach/review", {
+      method: "POST",
+      body: JSON.stringify({ note }),
+    }),
+};
+
+export const fmtPace = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s) % 60).padStart(2, "0")}`;
+
+export function segmentTarget(seg: { target_kind: string; low: number; high: number }, ftp?: number): string {
+  switch (seg.target_kind) {
+    case "power": {
+      if (ftp) {
+        const lo = Math.round(seg.low * ftp), hi = Math.round(seg.high * ftp);
+        return lo === hi ? `${lo}W` : `${lo}–${hi}W`;
+      }
+      return `${Math.round(seg.low * 100)}–${Math.round(seg.high * 100)}% FTP`;
+    }
+    case "pace":
+      return `${fmtPace(seg.high)}–${fmtPace(seg.low)} /км`;
+    case "hr":
+      return `${Math.round(seg.low)}–${Math.round(seg.high)} уд/мин`;
+    default:
+      return `RPE ${Math.round(seg.low)}–${Math.round(seg.high)}/10`;
+  }
+}

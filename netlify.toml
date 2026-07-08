@@ -1,0 +1,18 @@
+# Netlify config — deploys the app/ frontend and proxies /api to the Render backend.
+[build]
+  base = "app"
+  command = "npm run build"
+  publish = "dist"
+
+# Proxy API calls to the hosted backend (update the host if your Render
+# service gets a different name than "adaptio-api").
+[[redirects]]
+  from = "/api/*"
+  to = "https://adaptio-api.onrender.com/api/:splat"
+  status = 200
+
+# SPA fallback
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
