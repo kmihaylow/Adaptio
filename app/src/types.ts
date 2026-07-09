@@ -38,6 +38,7 @@ export interface Profile {
   strength_enabled: boolean;
   strength_setting?: "home" | "dumbbells" | "gym";
   stretching_enabled: boolean;
+  rest_today?: boolean;
   equipment: Equipment;
   goal: Goal;
 }

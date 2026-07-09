@@ -24,12 +24,14 @@ export default function WorkoutCard({
   ftp,
   onRate,
   onSkip,
+  onPush,
   expandable = true,
 }: {
   wo: Workout;
   ftp?: number;
   onRate?: (wo: Workout) => void;
   onSkip?: (wo: Workout) => void;
+  onPush?: (wo: Workout) => void;
   expandable?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -140,6 +142,13 @@ export default function WorkoutCard({
             🔒 Ще можеш да я отбележиш в деня на тренировката.
           </p>
         )
+      )}
+      {onPush && wo.status === "planned" && (wo.sport === "run" || wo.sport === "bike") && (
+        <div style={{ marginTop: 8 }} onClick={(e) => e.stopPropagation()}>
+          <button className="btn small ghost" onClick={() => onPush(wo)}>
+            📤 Качи само тази в Garmin
+          </button>
+        </div>
       )}
       {onRate && wo.status === "done" && wo.actual && !wo.rated && (
         <div style={{ marginTop: 12 }} onClick={(e) => e.stopPropagation()}>

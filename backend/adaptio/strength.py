@@ -21,6 +21,7 @@ form videos; swap for curated/own clips later.
 from __future__ import annotations
 
 from .models import Exercise, Plan, PlanWeek, Profile, StrengthSetting, Workout
+from .planning import week_available_days
 
 QUALITY_KINDS = {"threshold", "vo2max", "intervals", "tempo"}
 
@@ -169,7 +170,7 @@ def add_strength(plan: Plan, profile: Profile) -> None:
     for wk in plan.weeks:
         n = 1 if wk.phase in ("recovery", "taper") else 2
         week_workouts = [w for w in plan.workouts if w.plan_week == wk.number]
-        for day in _strength_days(week_workouts, profile.available_days, n):
+        for day in _strength_days(week_workouts, week_available_days(profile, wk.number), n):
             exercises = _exercises(profile.sport.value, wk.phase, setting)
             sets, reps = _DOSE[wk.phase]
             plan.workouts.append(Workout(

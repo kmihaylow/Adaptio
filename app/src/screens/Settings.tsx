@@ -17,13 +17,15 @@ export default function Settings({ onReset, onLogout }: { onReset: () => void; o
   const [athleteId, setAthleteId] = useState("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState("");
-  const [review, setReview] = useState<{ assessment: string; advice: string } | null>(null);
   const [metrics, setMetrics] = useState<Record<string, string>>({});
   const [metricsMsg, setMetricsMsg] = useState("");
+  const [garminConnected, setGarminConnected] = useState(false);
+  const [garminEmail, setGarminEmail] = useState("");
+  const [garminPass, setGarminPass] = useState("");
 
   useEffect(() => {
     api.intervalsStatus().then((r) => setConnected(r.connected)).catch(() => {});
+    api.garminStatus().then((r) => setGarminConnected(r.connected)).catch(() => {});
     api.getProfile().then((p: any) => {
       const m: Record<string, string> = {};
       for (const [key] of METRIC_FIELDS) m[key] = p[key] != null ? String(p[key]) : "";
@@ -77,11 +79,13 @@ export default function Settings({ onReset, onLogout }: { onReset: () => void; o
     setBusy(false);
   }
 
-  async function doReview() {
-    setBusy(true); setMsg(""); setReview(null);
+  async function connectGarminAcc() {
+    setBusy(true); setMsg("");
     try {
-      const r = await api.coachReview(note);
-      setReview(r);
+      const r = await api.connectGarmin(garminEmail, garminPass);
+      setGarminConnected(true);
+      setGarminPass("");
+      setMsg(`✅ Garmin е свързан (${r.athlete.name}). Тренировките ще се дърпат автоматично.`);
     } catch (e: any) { setMsg(`❌ ${e.message}`); }
     setBusy(false);
   }
@@ -138,20 +142,33 @@ export default function Settings({ onReset, onLogout }: { onReset: () => void; o
       </div>
 
       <div className="card">
-        <h2>🧠 Седмичен AI преглед</h2>
+        <h2>⌚ Garmin Connect (директно) {garminConnected && <span className="badge done">свързано</span>}</h2>
         <p className="sub" style={{ marginBottom: 12 }}>
-          Веднъж седмично треньорът преглежда оценките и възстановяването ти и коригира плана, ако трябва.
+          Директна връзка с твоя Garmin акаунт — завършените тренировки се дърпат без
+          intervals.icu. Неофициален канал: работи стабилно, но Garmin може да го промени;
+          акаунти с двустепенна верификация (MFA) не се поддържат.
         </p>
-        <div className="field">
-          <input type="text" value={note} onChange={(e) => setNote(e.target.value)}
-            placeholder="Нещо за споделяне? (по желание)" />
-        </div>
-        <button className="btn ghost" disabled={busy} onClick={doReview}>Поискай преглед</button>
-        {review && (
-          <div className="coach-note mt">
-            <p>{review.assessment}</p>
-            <p className="mt"><b>Съвет:</b> {review.advice}</p>
-          </div>
+        {!garminConnected ? (
+          <>
+            <div className="field">
+              <label>Garmin имейл</label>
+              <input type="text" autoCapitalize="none" value={garminEmail}
+                onChange={(e) => setGarminEmail(e.target.value)} placeholder="you@example.com" />
+            </div>
+            <div className="field">
+              <label>Garmin парола</label>
+              <input type="password" value={garminPass}
+                onChange={(e) => setGarminPass(e.target.value)} placeholder="••••••" />
+            </div>
+            <button className="btn" disabled={!garminEmail || !garminPass || busy} onClick={connectGarminAcc}>
+              Свържи Garmin
+            </button>
+          </>
+        ) : (
+          <button className="btn ghost" disabled={busy}
+            onClick={async () => { await api.disconnectGarmin().catch(() => {}); setGarminConnected(false); }}>
+            Изключи Garmin връзката
+          </button>
         )}
       </div>
 

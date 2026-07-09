@@ -107,6 +107,17 @@ def week_hours(profile: Profile, week: int, total: int, phase: str) -> float:
     return round(base, 1)
 
 
+def week_available_days(profile: Profile, week: int) -> list[int]:
+    """Available days for a given plan week. Week 1 starts on plan-creation
+    day; when the athlete asked for a rest day today, today drops out of it."""
+    if week == 1 and profile.rest_today:
+        today_wd = dt.date.today().weekday()
+        filtered = [d for d in profile.available_days if d != today_wd]
+        if filtered:
+            return filtered
+    return profile.available_days
+
+
 def place_days(available: list[int], n_sessions: int, long_day_pref: tuple[int, ...] = (6, 5)) -> list[int]:
     """Pick training days: long session on the weekend when possible, quality
     sessions spread out so hard days never stack back-to-back."""

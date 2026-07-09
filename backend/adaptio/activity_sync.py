@@ -10,6 +10,21 @@ compliance without raw data dumps.
 from __future__ import annotations
 
 
+def dedupe_activities(activities: list[dict]) -> list[dict]:
+    """The same physical session can arrive from two sources (Garmin also
+    feeds intervals.icu). Same day + sport + duration within 2 min = one."""
+    seen: list[dict] = []
+    out: list[dict] = []
+    for act in activities:
+        dup = any(s["date"] == act["date"] and s["sport"] == act["sport"]
+                  and abs(s["moving_time_min"] - act["moving_time_min"]) <= 2
+                  for s in seen)
+        if not dup:
+            seen.append(act)
+            out.append(act)
+    return out
+
+
 def match_activities(workouts: list[dict], activities: list[dict]) -> list[tuple[dict, dict]]:
     """Return (workout, activity) pairs to persist.
 
@@ -17,12 +32,19 @@ def match_activities(workouts: list[dict], activities: list[dict]) -> list[tuple
     synced before (same activity_id) or have no same-day planned workout are
     skipped — an unplanned ride shouldn't tick off a rest day.
     """
-    already_synced = {w["actual"]["activity_id"] for w in workouts if w.get("actual")}
+    stored = [w["actual"] for w in workouts if w.get("actual")]
+    already_synced = {a["activity_id"] for a in stored}
     pairs: list[tuple[dict, dict]] = []
     taken: set[int] = set()
 
+    def _is_stored_dup(act: dict) -> bool:
+        """Same session synced earlier from another source under another id."""
+        return any(s["date"] == act["date"] and s["sport"] == act["sport"]
+                   and abs((s.get("moving_time_min") or 0) - act["moving_time_min"]) <= 2
+                   for s in stored)
+
     for act in activities:
-        if act["activity_id"] in already_synced:
+        if act["activity_id"] in already_synced or _is_stored_dup(act):
             continue
         candidates = [
             w for w in workouts
