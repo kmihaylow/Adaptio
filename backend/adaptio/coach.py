@@ -38,6 +38,45 @@ REVIEW_SCHEMA = {
 }
 
 
+def _require_key() -> None:
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        raise RuntimeError(
+            "Липсва ANTHROPIC_API_KEY — добави го в backend/.env и РЕСТАРТИРАЙ "
+            "сървъра (.env се чете само при стартиране)."
+        )
+
+
+def _call(schema: dict, user_text: str) -> dict:
+    """One structured Claude call with API errors translated for the athlete."""
+    client = anthropic.Anthropic()
+    try:
+        response = client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=1024,
+            system=SYSTEM,
+            output_config={"format": {"type": "json_schema", "schema": schema}},
+            messages=[{"role": "user", "content": user_text}],
+        )
+    except anthropic.AuthenticationError:
+        raise RuntimeError("API ключът е невалиден — провери го в console.anthropic.com → API keys.")
+    except anthropic.BadRequestError as e:
+        if "credit" in str(e).lower() or "billing" in str(e).lower():
+            raise RuntimeError(
+                "Ключът е валиден, но акаунтът няма кредит. API-то се плаща отделно от "
+                "claude.ai: console.anthropic.com → Billing → добави кредит (мин. $5; "
+                "един преглед струва центове)."
+            )
+        raise RuntimeError(f"Заявката към AI беше отказана: {e}")
+    except anthropic.RateLimitError:
+        raise RuntimeError("Твърде много заявки за кратко време — изчакай минута и опитай пак.")
+    except anthropic.APIError:
+        raise RuntimeError("AI услугата не отговори — опитай пак след малко.")
+    if response.stop_reason == "refusal":
+        raise RuntimeError("AI прегледът отказа заявката.")
+    text = next(b.text for b in response.content if b.type == "text")
+    return json.loads(text)
+
+
 ANALYSIS_SCHEMA = {
     "type": "object",
     "properties": {
@@ -60,36 +99,20 @@ def analyze_activity(digest: dict) -> dict:
 
     `digest` carries the planned workout summary, the actual numbers and the
     athlete's zones — a dozen numbers, no raw streams (token frugality)."""
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        raise RuntimeError("ANTHROPIC_API_KEY not set — AI analysis unavailable")
-
-    client = anthropic.Anthropic()
+    _require_key()
     user = (
         "Analyze this single completed session like a coach reviewing an athlete's day. "
         "Judge execution against the session's PURPOSE (an easy run done too fast is a "
         "miss, not a win). Be specific with the numbers you are given.\n"
         f"{json.dumps(digest, ensure_ascii=False)}"
     )
-    response = client.messages.create(
-        model=CLAUDE_MODEL,
-        max_tokens=1024,
-        system=SYSTEM,
-        output_config={"format": {"type": "json_schema", "schema": ANALYSIS_SCHEMA}},
-        messages=[{"role": "user", "content": user}],
-    )
-    if response.stop_reason == "refusal":
-        raise RuntimeError("AI analysis declined the request")
-    text = next(b.text for b in response.content if b.type == "text")
-    return json.loads(text)
+    return _call(ANALYSIS_SCHEMA, user)
 
 
 def weekly_review(profile_digest: dict, ratings: list[dict],
                   wellness: list[dict] | None, user_note: str = "") -> dict:
     """One compact Claude call. Raises RuntimeError if no API key configured."""
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        raise RuntimeError("ANTHROPIC_API_KEY not set — AI review unavailable")
-
-    client = anthropic.Anthropic()
+    _require_key()
     user = (
         f"Athlete: {json.dumps(profile_digest, ensure_ascii=False)}\n"
         f"This week's workout ratings (oldest first): {json.dumps(ratings, ensure_ascii=False)}\n"
@@ -99,15 +122,4 @@ def weekly_review(profile_digest: dict, ratings: list[dict],
     if user_note:
         user += f'Athlete says: "{user_note}"\n'
     user += "Review the week and decide adjustments for the next one."
-
-    response = client.messages.create(
-        model=CLAUDE_MODEL,
-        max_tokens=1024,
-        system=SYSTEM,
-        output_config={"format": {"type": "json_schema", "schema": REVIEW_SCHEMA}},
-        messages=[{"role": "user", "content": user}],
-    )
-    if response.stop_reason == "refusal":
-        raise RuntimeError("AI review declined the request")
-    text = next(b.text for b in response.content if b.type == "text")
-    return json.loads(text)
+    return _call(REVIEW_SCHEMA, user)
