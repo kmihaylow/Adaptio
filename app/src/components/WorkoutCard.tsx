@@ -45,7 +45,8 @@ export default function WorkoutCard({
       <div className="wo-head">
         <div>
           <span className="badge">
-            {wo.sport === "run" ? "🏃 Бягане" : wo.sport === "bike" ? "🚴 Колоездене" : "💪 Силова"}
+            {wo.sport === "run" ? "🏃 Бягане" : wo.sport === "bike" ? "🚴 Колоездене"
+              : wo.sport === "stretching" ? "🧘 Стречинг" : "💪 Силова"}
           </span>
           {wo.status !== "planned" && (
             <span className={`badge ${wo.status}`}>{wo.status === "done" ? "Готова" : "Пропусната"}</span>

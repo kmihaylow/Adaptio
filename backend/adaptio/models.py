@@ -32,6 +32,16 @@ class BikeGoalType(str, Enum):
     ftp = "ftp"                  # raise FTP
     endurance = "endurance"      # ride longer / aerobic base
     vo2max = "vo2max"            # raise VO2max / top-end
+    general = "general"          # stay in good shape, no single focus
+    mixed = "mixed"              # develop all three systems in rotation
+
+
+class TrainingLevel(str, Enum):
+    """Training background — decides how aggressively the plan starts and ramps."""
+    beginner = "beginner"        # not training now / just starting
+    occasional = "occasional"    # 1-2 unstructured sessions a week
+    regular = "regular"          # 3-4 structured sessions a week, consistent
+    athlete = "athlete"          # years of training, race experience, 5+ sessions
 
 
 class RunDistance(str, Enum):
@@ -108,8 +118,17 @@ class Profile(BaseModel):
     available_days: list[int] = Field(default_factory=lambda: [0, 1, 3, 5, 6])  # 0=Mon
     # Context
     experience_years: float = 0
-    currently_training: bool = False  # already training regularly right now?
+    currently_training: bool = False  # legacy bool; training_level supersedes it
+    training_level: Optional[TrainingLevel] = None
     strength_enabled: bool = False    # add 1-2 short strength sessions weekly?
+    stretching_enabled: bool = False  # add short stretching/mobility sessions?
+
+    @property
+    def level(self) -> TrainingLevel:
+        """Resolved level, mapping old profiles that only have the bool."""
+        if self.training_level:
+            return self.training_level
+        return TrainingLevel.regular if self.currently_training else TrainingLevel.beginner
     equipment: Equipment = Field(default_factory=Equipment)
     goal: Goal = Field(default_factory=Goal)
 

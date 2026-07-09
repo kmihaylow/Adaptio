@@ -98,7 +98,13 @@ export default function Dashboard() {
         <ul className="seg-list">
           {d.zones.vdot && <li><span>VDOT (бегова форма)</span><span><b>{d.zones.vdot}</b></span></li>}
           {d.zones.ftp_w && <li><span>FTP</span><span><b>{d.zones.ftp_w} W</b></span></li>}
+          {d.zones.w_per_kg && <li><span>Мощност/тегло</span><span><b>{d.zones.w_per_kg} W/kg</b></span></li>}
           {d.zones.max_hr_bpm && <li><span>Макс. пулс{d.zones.max_hr_estimated ? " (оценка)" : ""}</span><span><b>{d.zones.max_hr_bpm} уд/мин</b></span></li>}
+          {d.zones.bmi && (
+            <li><span>BMI</span><span><b>{d.zones.bmi}</b>{" "}
+              <span className="sub">({d.zones.bmi < 18.5 ? "нисък" : d.zones.bmi < 25 ? "норма" : d.zones.bmi < 30 ? "наднормен" : "висок"})</span>
+            </span></li>
+          )}
         </ul>
         <p className="hint mt">Нови стойности от тест? Обнови ги в Настройки → Физиология.</p>
       </div>

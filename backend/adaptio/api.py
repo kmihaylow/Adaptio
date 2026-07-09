@@ -122,6 +122,7 @@ class MetricsUpdate(BaseModel):
     ftp_w: Optional[int] = Field(None, ge=50, le=600)
     lthr_bpm: Optional[int] = Field(None, ge=100, le=220)
     weight_kg: Optional[float] = Field(None, ge=30, le=250)
+    height_cm: Optional[float] = Field(None, ge=100, le=250)
 
 
 @app.post("/api/profile/metrics")
@@ -229,6 +230,20 @@ def dashboard(user: str = Depends(current_user)):
             focus.append("Средното усещане е много тежко (RPE ≥ 8.5) — намали интензивността на следващите качествени тренировки.")
         elif avg_rpe <= 3.5:
             focus.append("Тренировките са ти леки — ако това продължи, планът ще се адаптира нагоре.")
+
+    bmi = meta.get("zones", {}).get("bmi")
+    if bmi:
+        if bmi >= 27:
+            focus.append(
+                f"BMI {bmi} е над оптималното за издръжливост — всеки излишен килограм "
+                "струва ~1% бегова икономия и W/kg на колелото. Не гладувай: лек калориен "
+                "дефицит + белтъчини, а Z2 обемът ще свърши останалото."
+            )
+        elif bmi < 18.5:
+            focus.append(
+                f"BMI {bmi} е нисък — при недостатъчна енергия тялото жертва адаптацията "
+                "и костите (RED-S). Яж достатъчно около тренировките; при съмнение — лекар."
+            )
 
     race = (db.load_profile(user) or {}).get("goal", {}).get("race")
     days_to_race = None
@@ -392,8 +407,8 @@ def push_week(week: int, user: str = Depends(current_user)):
     for wo in _with_dates(meta, workouts):
         if wo["plan_week"] != week or wo["status"] != "planned":
             continue
-        if wo["sport"] == "strength":
-            continue  # strength stays in-app; Garmin gets only run/bike
+        if wo["sport"] in ("strength", "stretching"):
+            continue  # in-app sessions; Garmin gets only run/bike
         client.push_workout(
             dt.date.fromisoformat(wo["date"]), wo["name"], wo["sport"],
             workout_to_intervals_text(wo, ftp), wo["duration_min"],

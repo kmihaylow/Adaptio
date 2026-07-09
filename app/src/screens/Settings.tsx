@@ -8,6 +8,7 @@ const METRIC_FIELDS = [
   ["lthr_bpm", "LTHR (уд/мин)", "напр. 168"],
   ["resting_hr_bpm", "Пулс в покой", "напр. 55"],
   ["weight_kg", "Тегло (кг)", "напр. 78"],
+  ["height_cm", "Ръст (см)", "напр. 178"],
 ] as const;
 
 export default function Settings({ onReset, onLogout }: { onReset: () => void; onLogout: () => void }) {

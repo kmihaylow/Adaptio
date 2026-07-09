@@ -143,6 +143,9 @@ def resolve_zones(profile: Profile) -> dict:
     zones: dict = {"hr_bpm": hr_zones_bpm(profile)}
     zones["max_hr_bpm"] = profile.max_hr_bpm or estimated_max_hr(profile.age)
     zones["max_hr_estimated"] = profile.max_hr_bpm is None
+    if profile.height_cm:
+        h_m = profile.height_cm / 100
+        zones["bmi"] = round(profile.weight_kg / (h_m * h_m), 1)
     if profile.sport.value in ("run", "both"):
         vdot, src = resolve_vdot(profile)
         zones["vdot"] = round(vdot, 1)
@@ -152,5 +155,6 @@ def resolve_zones(profile: Profile) -> dict:
         ftp, src = resolve_ftp(profile)
         zones["ftp_w"] = ftp
         zones["ftp_source"] = src
+        zones["w_per_kg"] = round(ftp / profile.weight_kg, 2)
         zones["power_zones_w"] = power_zones_w(ftp)
     return zones

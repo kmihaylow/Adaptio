@@ -36,7 +36,13 @@ app/ (React+Vite PWA, Bulgarian UI)
   before races.
 - Cycling: Coggan zones from FTP. Goal tracks: FTP (sweet spot → threshold
   ladders), endurance (Z2 volume + low-cadence strength), VO2max (3-5 min
-  interval ladders). Volume ramp ≤ ~8%/week.
+  interval ladders), general (maintenance, 1 mild quality/wk), mixed (rotates
+  all three systems). Volume ramp ≤ ~8%/week.
+- Training level (beginner/occasional/regular/athlete, planning.LEVEL_PARAMS)
+  sets starting volume (70-100% of budget), ramp, base-phase length and the
+  weekly quality-session cap.
+- "Both" sport is implemented but hidden in the UI (SHOW_BOTH_SPORT flag in
+  Onboarding.tsx) until it gets more polish.
 - Equipment cascade: power meter/smart trainer → watt targets (+ .zwo);
   HR device → HR zones (LTHR if known, else max HR, else Tanaka estimate);
   nothing → RPE.
