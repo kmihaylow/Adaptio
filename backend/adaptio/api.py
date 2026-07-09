@@ -392,6 +392,8 @@ def push_week(week: int, user: str = Depends(current_user)):
     for wo in _with_dates(meta, workouts):
         if wo["plan_week"] != week or wo["status"] != "planned":
             continue
+        if wo["sport"] == "strength":
+            continue  # strength stays in-app; Garmin gets only run/bike
         client.push_workout(
             dt.date.fromisoformat(wo["date"]), wo["name"], wo["sport"],
             workout_to_intervals_text(wo, ftp), wo["duration_min"],

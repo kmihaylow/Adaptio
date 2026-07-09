@@ -220,7 +220,15 @@ def generate_bike_plan(profile: Profile) -> Plan:
 
 
 def generate_plan(profile: Profile) -> Plan:
-    """Entry point: run, bike, or interleaved both."""
+    """Entry point: run, bike, or interleaved both (+ optional strength)."""
+    plan = _generate_cardio_plan(profile)
+    if profile.strength_enabled:
+        from .strength import add_strength
+        add_strength(plan, profile)
+    return plan
+
+
+def _generate_cardio_plan(profile: Profile) -> Plan:
     from .models import Sport
     if profile.sport == Sport.run:
         return generate_run_plan_only(profile)

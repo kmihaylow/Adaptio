@@ -44,7 +44,9 @@ export default function WorkoutCard({
     <div className={`card wo ${wo.sport}`} onClick={() => expandable && setOpen(!open)}>
       <div className="wo-head">
         <div>
-          <span className="badge">{wo.sport === "run" ? "🏃 Бягане" : "🚴 Колоездене"}</span>
+          <span className="badge">
+            {wo.sport === "run" ? "🏃 Бягане" : wo.sport === "bike" ? "🚴 Колоездене" : "💪 Силова"}
+          </span>
           {wo.status !== "planned" && (
             <span className={`badge ${wo.status}`}>{wo.status === "done" ? "Готова" : "Пропусната"}</span>
           )}
@@ -56,18 +58,20 @@ export default function WorkoutCard({
           {wo.duration_min} мин
         </div>
       </div>
-      <div className="seg-strip">
-        {wo.segments.map((s, i) => (
-          <div
-            key={i}
-            style={{
-              width: `${(s.duration_s / total) * 100}%`,
-              height: `${20 + intensity(s) * 80}%`,
-              background: SEG_COLOR[s.type] ?? "#3a4356",
-            }}
-          />
-        ))}
-      </div>
+      {wo.segments.length > 0 && (
+        <div className="seg-strip">
+          {wo.segments.map((s, i) => (
+            <div
+              key={i}
+              style={{
+                width: `${(s.duration_s / total) * 100}%`,
+                height: `${20 + intensity(s) * 80}%`,
+                background: SEG_COLOR[s.type] ?? "#3a4356",
+              }}
+            />
+          ))}
+        </div>
+      )}
       <p className="wo-desc">{wo.description}</p>
       {wo.actual && (
         <p className="wo-desc" style={{ color: "#6ede8a", marginTop: 6 }}>
@@ -78,7 +82,7 @@ export default function WorkoutCard({
           {wo.actual.avg_hr ? ` · ${Math.round(wo.actual.avg_hr)} уд/мин` : ""}
         </p>
       )}
-      {open && (
+      {open && wo.segments.length > 0 && (
         <ul className="seg-list">
           {wo.segments.map((s, i) => (
             <li key={i}>
@@ -89,6 +93,32 @@ export default function WorkoutCard({
             </li>
           ))}
         </ul>
+      )}
+      {open && (wo.exercises?.length ?? 0) > 0 && (
+        <ul className="seg-list">
+          {wo.exercises!.map((ex, i) => (
+            <li key={i} style={{ display: "block" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                <span><b>{ex.name}</b></span>
+                <span style={{ whiteSpace: "nowrap" }}>{ex.sets}×{ex.reps}</span>
+              </div>
+              <div className="hint" style={{ marginTop: 2 }}>
+                {ex.note}{" "}
+                {ex.demo_url && (
+                  <a href={ex.demo_url} target="_blank" rel="noreferrer"
+                    onClick={(e) => e.stopPropagation()} style={{ color: "var(--accent)" }}>
+                    ▶ демо
+                  </a>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {!open && (wo.exercises?.length ?? 0) > 0 && (
+        <p className="hint" style={{ marginTop: 6 }}>
+          Докосни за списъка с упражнения и демо клипове ▾
+        </p>
       )}
       {(onRate || onSkip) && wo.status === "planned" && (
         wo.date <= new Date().toLocaleDateString("sv-SE") ? (

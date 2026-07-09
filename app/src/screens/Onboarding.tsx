@@ -15,7 +15,7 @@ type Draft = {
   age: string; sex: "male" | "female"; weight: string;
   maxHr: string; restingHr: string; vo2max: string; ftp: string; lthr: string;
   raceDist: string; raceMin: string; raceSec: string;
-  weeklyHours: number; days: number[]; currentlyTraining: boolean;
+  weeklyHours: number; days: number[]; currentlyTraining: boolean; strength: boolean;
   hasRace: boolean; raceName: string; raceDate: string; weeks: number;
   runGoalType: string; runDistance: string; targetH: string; targetM: string; targetS: string;
   paceM: string; paceS: string; bikeGoalType: string;
@@ -26,7 +26,7 @@ const init: Draft = {
   sport: null, age: "", sex: "male", weight: "",
   maxHr: "", restingHr: "", vo2max: "", ftp: "", lthr: "",
   raceDist: "", raceMin: "", raceSec: "",
-  weeklyHours: 5, days: [0, 2, 4, 6], currentlyTraining: false,
+  weeklyHours: 5, days: [0, 2, 4, 6], currentlyTraining: false, strength: false,
   hasRace: false, raceName: "", raceDate: "", weeks: 8,
   runGoalType: "race_time", runDistance: "10k", targetH: "0", targetM: "50", targetS: "0",
   paceM: "5", paceS: "30", bikeGoalType: "ftp",
@@ -80,6 +80,7 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
       available_days: d.days,
       experience_years: 0,
       currently_training: d.currentlyTraining,
+      strength_enabled: d.strength,
       equipment: d.eq,
       goal: {
         run_goal_type: isRun ? (d.runGoalType as any) : null,
@@ -268,6 +269,19 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
             ))}
           </div>
           {d.days.length < 2 && <p className="hint mt">Избери поне 2 дни.</p>}
+
+          <h2 className="mt">Искаш ли и силови тренировки?</h2>
+          <p className="sub" style={{ marginBottom: 10 }}>
+            1-2 кратки сесии седмично (~30 мин, вкъщи) — по-малко контузии и по-добра икономия на движението.
+          </p>
+          <div className="opts cols2">
+            <button className={`opt ${d.strength ? "selected" : ""}`} onClick={() => set({ strength: true })}>
+              <span className="t">💪 Да, добави ги</span>
+            </button>
+            <button className={`opt ${!d.strength ? "selected" : ""}`} onClick={() => set({ strength: false })}>
+              <span className="t">Само {d.sport === "bike" ? "колелото" : d.sport === "both" ? "кардиото" : "бягането"}</span>
+            </button>
+          </div>
         </>
       )}
 

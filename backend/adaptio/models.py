@@ -109,6 +109,7 @@ class Profile(BaseModel):
     # Context
     experience_years: float = 0
     currently_training: bool = False  # already training regularly right now?
+    strength_enabled: bool = False    # add 1-2 short strength sessions weekly?
     equipment: Equipment = Field(default_factory=Equipment)
     goal: Goal = Field(default_factory=Goal)
 
@@ -139,17 +140,27 @@ class Segment(BaseModel):
     note: Optional[str] = None
 
 
+class Exercise(BaseModel):
+    """One strength-catalog movement with a form-demo link."""
+    name: str
+    sets: int
+    reps: str                         # "8-10" or "30 сек"
+    note: str = ""
+    demo_url: str = ""
+
+
 class Workout(BaseModel):
     id: Optional[int] = None
     plan_week: int                    # 1-based
     day_of_week: int                  # 0=Mon
     date: Optional[dt.date] = None
-    sport: str                        # "run" | "bike"
+    sport: str                        # "run" | "bike" | "strength"
     name: str
     kind: str                         # endurance | tempo | threshold | vo2max | long | recovery | intervals | race
     duration_min: int
     description: str = ""
     segments: list[Segment] = Field(default_factory=list)
+    exercises: list[Exercise] = Field(default_factory=list)  # strength sessions only
     status: str = "planned"           # planned | done | skipped
     load_hint: int = 0                # rough TSS-like number for progress charts
     actual: Optional[dict] = None     # synced intervals.icu activity summary
