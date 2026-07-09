@@ -25,6 +25,33 @@ const LIMITS = {
   lthr: [100, 210, "уд/мин"],
 } as const;
 
+function weeksHint(weeks: number, isRun: boolean): { title: string; text: string } {
+  if (weeks <= 6) return {
+    title: "⚡ Бърз старт",
+    text: "Плюс: бърза видима промяна — навик, свежест, по-леко усещане при усилие. " +
+      "Минус: истинската физиология (митохондрии, капиляри, ударен обем на сърцето) едва тръгва. " +
+      `Реалистично: ${isRun ? "5-15 сек/км по-бързо леко темпо" : "FTP +2-4%"}, но основната печалба е рутината.`,
+  };
+  if (weeks <= 10) return {
+    title: "⚖️ Балансиран цикъл",
+    text: "Плюс: пълен цикъл база → изграждане → пик с възстановителни седмици — първите стабилни адаптации. " +
+      `Реалистично: ${isRun ? "VDOT +1-2 (~20-40 сек на 10 км)" : "FTP +5-8%"}, ` +
+      "по-нисък пулс на същото темпо, усетимо по-лесни дълги тренировки.",
+  };
+  if (weeks <= 16) return {
+    title: "🏗 Дълбока адаптация",
+    text: "Плюс: две пълни вълни натоварване — тук стават структурните промени, които остават. " +
+      `Реалистично: ${isRun ? "VDOT +2-4 (~1-2 мин на 10 км)" : "FTP +8-12%"}, ` +
+      "нов праг на издръжливост. Минус: изисква постоянство — пропуснатите седмици връщат назад.",
+  };
+  return {
+    title: "🗻 Сериозен блок",
+    text: "Плюс: най-големите и трайни промени + време за шлифоване на слабости. " +
+      `Реалистично: ${isRun ? "ново ниво на дистанцията (3-5+ мин на 10 км при последователност)" : "FTP +10-15% и чувствително по-висок W/kg"}. ` +
+      "Минус: мотивацията е по-голямото предизвикателство от краката — междинни цели помагат.",
+  };
+}
+
 function rangeErr(key: keyof typeof LIMITS, value: string): string | null {
   if (value === "") return null;
   const [lo, hi, unit] = LIMITS[key];
@@ -386,6 +413,10 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
               <div className="sub">Искам да видя резултати за</div>
               <div style={{ fontSize: "2rem", fontWeight: 800 }}>{d.weeks} седмици</div>
               <input type="range" min={4} max={24} value={d.weeks} onChange={(e) => set({ weeks: +e.target.value })} />
+              <div style={{ textAlign: "left", marginTop: 10 }}>
+                <b>{weeksHint(d.weeks, isRun).title}</b>
+                <p className="hint" style={{ marginTop: 4 }}>{weeksHint(d.weeks, isRun).text}</p>
+              </div>
             </div>
           )}
 

@@ -1,10 +1,11 @@
-"""Parse manually uploaded TCX/GPX activity files into the same compact
+"""Parse manually uploaded FIT/TCX/GPX activity files into the same compact
 summary shape that intervals.icu activities use, so the one matching pipeline
 (activity_sync.match_activities) handles both sources.
 
-Stdlib-only on purpose (keep deps minimal): TCX and GPX are plain XML. .FIT is
-binary and needs a dependency — Garmin exports TCX/GPX from Connect, and the
-intervals.icu auto-sync covers the FIT path anyway.
+TCX and GPX are plain XML (stdlib). FIT is Garmin's binary native format —
+the richest of the three (power, laps, real moving time) and what the watch
+actually records, so it gets first-class support via `fitdecode` (pure
+Python, no transitive deps).
 """
 
 from __future__ import annotations
@@ -121,6 +122,65 @@ def parse_gpx(raw: bytes, name: str) -> dict:
     return _summary(sport, times[0], moving_s, distance_m, hrs, [], raw, name)
 
 
+def parse_fit(raw: bytes, name: str) -> dict:
+    """FIT: prefer the device's own 'session' summary message; fall back to
+    aggregating 'record' messages for stripped-down files."""
+    import io
+
+    import fitdecode
+
+    session: dict = {}
+    hrs: list[float] = []
+    watts: list[float] = []
+    times: list[dt.datetime] = []
+    distance_m = 0.0
+    try:
+        with fitdecode.FitReader(io.BytesIO(raw)) as reader:
+            for frame in reader:
+                if not isinstance(frame, fitdecode.FitDataMessage):
+                    continue
+                if frame.name == "session":
+                    for f in frame.fields:
+                        if f.value is not None:
+                            session[f.name] = f.value
+                elif frame.name == "record":
+                    for f in frame.fields:
+                        if f.value is None:
+                            continue
+                        if f.name == "heart_rate":
+                            hrs.append(float(f.value))
+                        elif f.name == "power":
+                            watts.append(float(f.value))
+                        elif f.name == "timestamp":
+                            times.append(f.value)
+                        elif f.name == "distance":
+                            distance_m = max(distance_m, float(f.value))
+    except fitdecode.FitError as e:
+        raise UnsupportedFile(f"FIT файлът не можа да бъде прочетен: {e}")
+
+    sport_txt = str(session.get("sport", "")).lower()
+    sport = ("run" if "run" in sport_txt
+             else "bike" if "cycl" in sport_txt or "bik" in sport_txt else None)
+    moving_s = float(session.get("total_moving_time") or session.get("total_timer_time")
+                     or session.get("total_elapsed_time") or 0)
+    if not moving_s and len(times) >= 2:
+        moving_s = (times[-1] - times[0]).total_seconds()
+    if moving_s <= 0:
+        raise UnsupportedFile("FIT файлът няма продължителност.")
+    distance_m = float(session.get("total_distance") or distance_m or 0)
+    start = session.get("start_time") or (times[0] if times else None)
+    if isinstance(start, dt.datetime) and start.tzinfo is None:
+        start = start.replace(tzinfo=dt.timezone.utc)
+
+    if session.get("avg_heart_rate"):
+        hrs = [float(session["avg_heart_rate"])]
+    if session.get("avg_power"):
+        watts = [float(session["avg_power"])]
+    if sport is None:
+        sport = _infer_sport(distance_m, moving_s)
+    return _summary(sport, start, moving_s, distance_m, hrs, watts, raw, name)
+
+
 def _infer_sport(distance_m: float, moving_s: float) -> str:
     """No sport tag? Above ~16 km/h sustained it's almost certainly a ride."""
     if distance_m and moving_s:
@@ -131,13 +191,10 @@ def _infer_sport(distance_m: float, moving_s: float) -> str:
 
 def parse_activity_file(filename: str, raw: bytes) -> dict:
     low = filename.lower()
+    if low.endswith(".fit"):
+        return parse_fit(raw, filename)
     if low.endswith(".tcx"):
         return parse_tcx(raw, filename)
     if low.endswith(".gpx"):
         return parse_gpx(raw, filename)
-    if low.endswith(".fit"):
-        raise UnsupportedFile(
-            "FIT файловете още не се поддържат директно — експортирай TCX/GPX от "
-            "Garmin Connect (⚙️ → Export), или ползвай intervals.icu синхронизацията."
-        )
-    raise UnsupportedFile("Поддържани формати: .tcx и .gpx.")
+    raise UnsupportedFile("Поддържани формати: .fit, .tcx и .gpx.")

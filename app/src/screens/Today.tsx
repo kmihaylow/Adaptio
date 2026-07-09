@@ -58,18 +58,25 @@ export default function Today() {
 
       {coachMsg && <div className="coach-note" onClick={() => setCoachMsg(null)}>🧠 {coachMsg}</div>}
 
-      {!timeAsked && cardioToday.length > 0 && (
-        <div className="card">
-          <h2>⏱ Разполагаш ли с {cardioToday.reduce((a, w) => a + w.duration_min, 0)} мин днес?</h2>
-          <p className="sub" style={{ marginBottom: 10 }}>
-            Кажи ми и ще преразпределя — качествената работа остава, лекият обем се напасва.
-          </p>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button className="btn small ghost" onClick={() => timeCheck(0.7)}>Имам по-малко</button>
-            <button className="btn small" onClick={() => timeCheck(1)}>Точно толкова</button>
-            <button className="btn small ghost" onClick={() => timeCheck(1.3)}>Имам повече</button>
+      {cardioToday.length > 0 && (
+        !timeAsked ? (
+          <div className="card">
+            <h2>⏱ Разполагаш ли с {cardioToday.reduce((a, w) => a + w.duration_min, 0)} мин днес?</h2>
+            <p className="sub" style={{ marginBottom: 10 }}>
+              Кажи ми и ще преразпределя — качествената работа остава, лекият обем се напасва.
+            </p>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button className="btn small ghost" onClick={() => timeCheck(0.7)}>Имам по-малко</button>
+              <button className="btn small" onClick={() => timeCheck(1)}>Точно толкова</button>
+              <button className="btn small ghost" onClick={() => timeCheck(1.3)}>Имам повече</button>
+            </div>
           </div>
-        </div>
+        ) : (
+          <button className="btn small ghost" style={{ marginBottom: 12 }}
+            onClick={() => setTimeAsked(false)}>
+            ⏱ Друго време днес? Преразпредели
+          </button>
+        )
       )}
       {err && (
         <>

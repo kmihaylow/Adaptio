@@ -1,4 +1,4 @@
-import type { Dashboard, LastAnalysis, Plan, Profile, Workout } from "./types";
+import type { ActualActivity, ComparisonRow, Dashboard, LastAnalysis, Plan, Profile, Workout } from "./types";
 
 const TOKEN_KEY = "adaptio_token";
 export const getToken = () => localStorage.getItem(TOKEN_KEY);
@@ -110,8 +110,15 @@ export const api = {
       try { const j = await r.json(); if (j.detail) detail = j.detail; } catch {}
       throw new Error(detail);
     }
-    return r.json() as Promise<{ synced: number; messages: string[] }>;
+    return r.json() as Promise<{ synced: number; messages: string[];
+      activity: ActualActivity; analysis: ComparisonRow[] }>;
   },
+  analysisAdhocAI: (activity: ActualActivity) =>
+    req<{ verdict: string; execution_score: number; strengths: string[];
+          improvements: string[]; next_advice: string }>(
+      "/api/analysis/adhoc/ai",
+      { method: "POST", body: JSON.stringify({ activity }) },
+    ),
   analysisLast: () => req<LastAnalysis>("/api/analysis/last"),
   analysisAI: () =>
     req<{ verdict: string; execution_score: number; strengths: string[];

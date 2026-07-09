@@ -179,6 +179,17 @@ def get_plan(user: str = Depends(current_user)):
 
 # ---------------------------------------------------------------- dashboard
 
+def _tdee_kcal(p: dict) -> int | None:
+    """Rough maintenance calories: Mifflin-St Jeor BMR × activity factor that
+    already includes the plan's training hours. Approximate on purpose."""
+    if not all(p.get(k) for k in ("weight_kg", "height_cm", "age")):
+        return None
+    bmr = 10 * p["weight_kg"] + 6.25 * p["height_cm"] - 5 * p["age"]
+    bmr += 5 if p.get("sex") != "female" else -161
+    # sedentary base 1.3 + ~0.045 per weekly training hour (≈390 kcal/h at 75kg)
+    factor = 1.3 + 0.045 * min(15, p.get("weekly_hours") or 0)
+    return round(bmr * factor / 10) * 10
+
 @app.get("/api/dashboard")
 def dashboard(user: str = Depends(current_user)):
     row = db.active_plan(user)
@@ -231,21 +242,26 @@ def dashboard(user: str = Depends(current_user)):
         elif avg_rpe <= 3.5:
             focus.append("Тренировките са ти леки — ако това продължи, планът ще се адаптира нагоре.")
 
+    profile = db.load_profile(user) or {}
     bmi = meta.get("zones", {}).get("bmi")
     if bmi:
         if bmi >= 27:
-            focus.append(
-                f"BMI {bmi} е над оптималното за издръжливост — всеки излишен килограм "
-                "струва ~1% бегова икономия и W/kg на колелото. Не гладувай: лек калориен "
-                "дефицит + белтъчини, а Z2 обемът ще свърши останалото."
-            )
+            msg = (f"BMI {bmi} е над оптималното за издръжливост — всеки излишен килограм "
+                   "струва ~1% бегова икономия и W/kg на колелото.")
+            tdee = _tdee_kcal(profile)
+            if tdee:
+                msg += (f" Ориентировъчно: поддръжката ти е ~{tdee} kcal/ден (вкл. тренировките); "
+                        f"дефицит от ~400-500 kcal (т.е. ~{tdee - 450} kcal/ден) сваля ~0.4-0.5 кг "
+                        "седмично, без да съсипва тренировките. Белтъчини ~1.6-2 г/кг, дефицитът "
+                        "никога в дните с качествени тренировки на гладно.")
+            focus.append(msg)
         elif bmi < 18.5:
             focus.append(
                 f"BMI {bmi} е нисък — при недостатъчна енергия тялото жертва адаптацията "
                 "и костите (RED-S). Яж достатъчно около тренировките; при съмнение — лекар."
             )
 
-    race = (db.load_profile(user) or {}).get("goal", {}).get("race")
+    race = profile.get("goal", {}).get("race")
     days_to_race = None
     if race and race.get("date"):
         days_to_race = (dt.date.fromisoformat(race["date"]) - dt.date.today()).days
@@ -342,6 +358,72 @@ def _compare_plan_actual(wo: dict, zones: dict) -> list[dict]:
                      "comment": "Общият стрес съответства на плана." if verdict == "ok"
                      else "Общият стрес се разминава с плана — виж горните редове защо."})
     return rows
+
+
+def _analyze_standalone(act: dict, zones: dict) -> list[dict]:
+    """Judge an activity against the athlete's zones when there is no plan to
+    compare with (unplanned session or rest-day upload)."""
+    rows: list[dict] = []
+    rows.append({"metric": "Продължителност", "planned": "—",
+                 "actual": f"{act['moving_time_min']} мин", "verdict": "ok",
+                 "comment": "Непланирана активност — няма план за сравнение."})
+    if act.get("pace_s_per_km") and zones.get("run_paces_s_per_km"):
+        easy = zones["run_paces_s_per_km"].get("easy")
+        thr = zones["run_paces_s_per_km"].get("threshold")
+        pace = act["pace_s_per_km"]
+        if easy and pace > easy[0]:
+            v, c = "ok", "Спокойно възстановително темпо — чудесно за непланиран ден."
+        elif easy and pace >= easy[1] - 10:
+            v, c = "ok", "Класическо лесно/Z2 темпо — гради база, без да пречи на плана."
+        elif thr and pace <= thr[1]:
+            v, c = "over", ("Темпо около/под прага — това е качествена тренировка. Внимавай: "
+                            "непланираната интензивност е най-честият крадец на възстановяване.")
+        else:
+            v, c = "over", "По-бързо от лекото — умерена интензивност, брой я за тренировъчен стрес."
+        rows.append({"metric": "Темпо", "planned": f"Леко: {_fmt_pace(easy[0])}–{_fmt_pace(easy[1])}/км" if easy else "—",
+                     "actual": f"{_fmt_pace(pace)}/км", "verdict": v, "comment": c})
+    if act.get("avg_watts") and zones.get("ftp_w"):
+        ftp = zones["ftp_w"]
+        pct = act["avg_watts"] / ftp
+        zone = ("Z1-Z2 (леко)" if pct < 0.75 else "Z3 (темпо)" if pct < 0.88
+                else "Sweet spot / праг" if pct < 1.05 else "Над прага")
+        v = "ok" if pct < 0.75 else "over"
+        rows.append({"metric": "Мощност", "planned": f"FTP {ftp}W",
+                     "actual": f"{round(act['avg_watts'])}W (~{round(pct * 100)}% FTP)",
+                     "verdict": v, "comment": f"Средно усилие в зона: {zone}."})
+    if act.get("avg_hr") and zones.get("hr_bpm", {}).get("z2_endurance"):
+        z2 = zones["hr_bpm"]["z2_endurance"]
+        hr = act["avg_hr"]
+        v = "ok" if hr <= z2[1] + 5 else "over"
+        rows.append({"metric": "Пулс", "planned": f"Z2: {z2[0]}–{z2[1]} уд/мин",
+                     "actual": f"{round(hr)} уд/мин", "verdict": v,
+                     "comment": "В аеробната зона." if v == "ok"
+                     else "Над Z2 — тази активност носи реален тренировъчен стрес."})
+    return rows
+
+
+class AdhocAnalysis(BaseModel):
+    activity: dict
+
+
+@app.post("/api/analysis/adhoc/ai")
+def analysis_adhoc_ai(body: AdhocAnalysis, user: str = Depends(current_user)):
+    """Deep AI review of an uploaded activity that matched no planned workout."""
+    row = db.active_plan(user)
+    zones = row[1].get("zones", {}) if row else {}
+    digest = {
+        "session": None,
+        "note": "Unplanned activity — no scheduled workout that day. Judge it in the "
+                "context of an ongoing structured plan (recovery cost, whether it helps or steals).",
+        "actual": body.activity,
+        "deterministic_checks": _analyze_standalone(body.activity, zones),
+        "zones": {k: v for k, v in zones.items()
+                  if k in ("vdot", "ftp_w", "max_hr_bpm", "w_per_kg", "bmi")},
+    }
+    try:
+        return coach.analyze_activity(digest)
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
 
 
 def _last_actual(user: str):
@@ -544,11 +626,17 @@ async def upload_activity(file: UploadFile = File(...), user: str = Depends(curr
         raise HTTPException(404, "Няма активен план.")
     _, meta, workouts = row
     workouts = _with_dates(meta, workouts)
+    zones = meta.get("zones", {})
     pairs, messages = _apply_matches(workouts, [act])
-    if not pairs:
+    if pairs:
+        wo, _ = pairs[0]
+        analysis = _compare_plan_actual(wo, zones)
+    else:
+        # no same-day planned workout — still analyze the file on its own
+        analysis = _analyze_standalone(act, zones)
         messages.append(
-            f"Файлът е прочетен ({act['moving_time_min']} мин, {act['date']}), но няма "
-            "планирана тренировка от същия спорт на тази дата, която да отбележа."
+            f"Няма планирана тренировка от същия спорт на {act['date']}, затова анализирах "
+            "активността самостоятелно спрямо твоите зони."
         )
     return {
         "synced": len(pairs),
@@ -556,6 +644,7 @@ async def upload_activity(file: UploadFile = File(...), user: str = Depends(curr
         "matched": [{"workout_id": w["id"], "workout": w["name"], "date": a["date"]}
                     for w, a in pairs],
         "messages": messages,
+        "analysis": analysis,
     }
 
 
