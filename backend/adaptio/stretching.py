@@ -75,9 +75,13 @@ def _stretch_days(week_workouts: list[Workout], n: int) -> list[int]:
 
 def add_stretching(plan: Plan, profile: Profile) -> None:
     """Append stretching sessions to a generated plan, in place."""
+    import datetime as dt
     for wk in plan.weeks:
         week_workouts = [w for w in plan.workouts if w.plan_week == wk.number]
-        for day in _stretch_days(week_workouts, 2):
+        days = _stretch_days(week_workouts, 2)
+        if wk.number == 1 and profile.rest_today:
+            days = [d for d in days if d != dt.date.today().weekday()]
+        for day in days:
             exercises = _exercises(profile.sport.value)
             plan.workouts.append(Workout(
                 plan_week=wk.number, day_of_week=day, sport="stretching",

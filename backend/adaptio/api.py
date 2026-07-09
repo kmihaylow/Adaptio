@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from . import activity_sync, activity_upload, adaptation, auth, coach, db, zwo
 from .auth import current_user
+from .garmin import GarminClient, GarminError
 from .intervals import IntervalsClient, workout_to_intervals_text
 from .models import Profile, WorkoutRating
 from .plan_bike import generate_plan
@@ -26,6 +27,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 db.init()
+
+# Seeded local account so Kiril's data survives every pull/merge: the SQLite
+# file is gitignored, so git never touches it — only a DB wipe loses data.
+if not db.user_by_username("admin"):
+    db.create_user(auth.new_user_id(), "admin", auth.hash_password("admin123"))
 
 
 def _workout_date(plan_created: str, plan_week: int, day_of_week: int) -> dt.date:
@@ -584,27 +590,40 @@ def _apply_matches(workouts: list[dict], acts: list[dict]) -> tuple[list, list[s
 
 @app.post("/api/sync/activities")
 def sync_activities(user: str = Depends(current_user)):
-    """Pull recent completed activities from intervals.icu and tick off the
-    matching planned workouts, storing a compact plan-vs-actual summary."""
-    creds = db.load_integration(user, "intervals")
-    if not creds:
-        raise HTTPException(400, "intervals.icu не е свързан.")
+    """Pull recent completed activities from every connected source
+    (intervals.icu and/or direct Garmin Connect) and tick off the matching
+    planned workouts, storing a compact plan-vs-actual summary."""
+    intervals_creds = db.load_integration(user, "intervals")
+    garmin_creds = db.load_integration(user, "garmin")
+    if not intervals_creds and not garmin_creds:
+        raise HTTPException(400, "Нито intervals.icu, нито Garmin Connect е свързан.")
     row = db.active_plan(user)
     if not row:
         raise HTTPException(404, "Няма активен план.")
     _, meta, workouts = row
     workouts = _with_dates(meta, workouts)
-    client = IntervalsClient(creds["api_key"], creds["athlete_id"])
-    try:
-        acts = client.activities()
-    except Exception:
-        raise HTTPException(502, "intervals.icu не отговори — опитай пак по-късно.")
-    pairs, messages = _apply_matches(workouts, acts)
+
+    acts: list[dict] = []
+    errors: list[str] = []
+    if intervals_creds:
+        try:
+            acts += IntervalsClient(intervals_creds["api_key"],
+                                    intervals_creds["athlete_id"]).activities()
+        except Exception:
+            errors.append("intervals.icu не отговори.")
+    if garmin_creds:
+        try:
+            acts += GarminClient(garmin_creds["email"], garmin_creds["password"]).activities()
+        except GarminError as e:
+            errors.append(str(e))
+    if not acts and errors:
+        raise HTTPException(502, " ".join(errors))
+    pairs, messages = _apply_matches(workouts, activity_sync.dedupe_activities(acts))
     return {
         "synced": len(pairs),
         "matched": [{"workout_id": w["id"], "workout": w["name"],
                      "activity": a["name"], "date": a["date"]} for w, a in pairs],
-        "messages": messages,
+        "messages": messages + errors,
     }
 
 
@@ -678,6 +697,29 @@ def _intervals_client(user: str) -> IntervalsClient:
     return IntervalsClient(creds["api_key"], creds["athlete_id"])
 
 
+@app.post("/api/integrations/intervals/push-workout/{workout_id}")
+def push_single_workout(workout_id: int, user: str = Depends(current_user)):
+    """Push ONE workout to the intervals.icu calendar — safer than pushing a
+    whole week that the adaptive plan may later rewrite (изискване т.5)."""
+    wo = db.get_workout(user, workout_id)
+    if not wo:
+        raise HTTPException(404, "Няма такава тренировка.")
+    if wo["sport"] not in ("run", "bike"):
+        raise HTTPException(400, "Само бягане/колоездене се качват в Garmin календара.")
+    if wo["status"] != "planned":
+        raise HTTPException(400, "Тренировката вече не е планирана.")
+    row = db.active_plan(user)
+    if not row:
+        raise HTTPException(404, "Няма активен план.")
+    _, meta, _ = row
+    client = _intervals_client(user)
+    date = _workout_date(wo["plan_created"], wo["plan_week"], wo["day_of_week"])
+    ftp = meta.get("zones", {}).get("ftp_w")
+    client.push_workout(date, wo["name"], wo["sport"],
+                        workout_to_intervals_text(wo, ftp), wo["duration_min"])
+    return {"pushed": 1, "date": date.isoformat()}
+
+
 @app.post("/api/integrations/intervals/push-week/{week}")
 def push_week(week: int, user: str = Depends(current_user)):
     row = db.active_plan(user)
@@ -698,6 +740,36 @@ def push_week(week: int, user: str = Depends(current_user)):
         )
         pushed += 1
     return {"pushed": pushed}
+
+
+# ------------------------------------------------------------ garmin direct
+
+class GarminCreds(BaseModel):
+    email: str
+    password: str
+
+
+@app.post("/api/integrations/garmin")
+def connect_garmin(creds: GarminCreds, user: str = Depends(current_user)):
+    client = GarminClient(creds.email, creds.password)
+    try:
+        info = client.check()
+    except GarminError as e:
+        raise HTTPException(400, str(e))
+    db.save_integration(user, "garmin", creds.model_dump())
+    return {"connected": True, "athlete": info}
+
+
+@app.get("/api/integrations/garmin")
+def garmin_status(user: str = Depends(current_user)):
+    return {"connected": db.load_integration(user, "garmin") is not None}
+
+
+@app.delete("/api/integrations/garmin")
+def disconnect_garmin(user: str = Depends(current_user)):
+    with db.conn() as c:
+        c.execute("DELETE FROM integrations WHERE user_id=? AND provider='garmin'", (user,))
+    return {"connected": False}
 
 
 # ----------------------------------------------------------------- AI coach

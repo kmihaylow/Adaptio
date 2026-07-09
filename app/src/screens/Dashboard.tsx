@@ -21,6 +21,10 @@ export default function Dashboard() {
   const [aiBusy, setAiBusy] = useState(false);
   const [aiErr, setAiErr] = useState("");
   const [uploadMsg, setUploadMsg] = useState("");
+  const [note, setNote] = useState("");
+  const [review, setReview] = useState<{ assessment: string; advice: string } | null>(null);
+  const [reviewBusy, setReviewBusy] = useState(false);
+  const [reviewErr, setReviewErr] = useState("");
   const [adhoc, setAdhoc] = useState<{ activity: ActualActivity; analysis: ComparisonRow[] } | null>(null);
   const [adhocAi, setAdhocAi] = useState<AiReview | null>(null);
   const [adhocBusy, setAdhocBusy] = useState(false);
@@ -56,6 +60,13 @@ export default function Dashboard() {
       if (r.synced > 0) { setAi(null); load(); }
       else if (r.analysis?.length) setAdhoc({ activity: r.activity, analysis: r.analysis });
     } catch (e: any) { setUploadMsg(`❌ ${e.message}`); }
+  }
+
+  async function doReview() {
+    setReviewBusy(true); setReviewErr(""); setReview(null);
+    try { setReview(await api.coachReview(note)); }
+    catch (e: any) { setReviewErr(e.message); }
+    setReviewBusy(false);
   }
 
   async function adhocAnalysis() {
@@ -216,6 +227,28 @@ export default function Dashboard() {
             );
           })}
         </div>
+      </div>
+
+      <div className="card">
+        <h2>🧠 Разговор с треньора</h2>
+        <p className="sub" style={{ marginBottom: 12 }}>
+          Седмичен преглед: треньорът гледа оценките, изпълнението и възстановяването ти
+          и коригира плана, ако трябва. Сподели как се чувстваш.
+        </p>
+        <div className="field">
+          <input type="text" value={note} onChange={(e) => setNote(e.target.value)}
+            placeholder="Нещо за споделяне? (по желание)" />
+        </div>
+        <button className="btn ghost" disabled={reviewBusy} onClick={doReview}>
+          {reviewBusy ? <span className="spin">⚙️</span> : "Поискай преглед"}
+        </button>
+        {review && (
+          <div className="coach-note mt">
+            <p>{review.assessment}</p>
+            <p className="mt"><b>Съвет:</b> {review.advice}</p>
+          </div>
+        )}
+        {reviewErr && <p className="hint mt">❌ {reviewErr}</p>}
       </div>
 
       {d.missed > 0 && (

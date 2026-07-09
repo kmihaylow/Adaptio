@@ -14,6 +14,7 @@ export default function Today() {
   const [coachMsg, setCoachMsg] = useState<string | null>(null);
   const [err, setErr] = useState("");
   const [timeAsked, setTimeAsked] = useState(() => !!localStorage.getItem(timeCheckKey()));
+  const [canPush, setCanPush] = useState(false);
 
   async function load() {
     try {
@@ -25,9 +26,19 @@ export default function Today() {
       setErr(e.message);
     }
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    api.intervalsStatus().then((r) => setCanPush(r.connected)).catch(() => {});
+  }, []);
 
   const cardioToday = today.filter((w) => (w.sport === "run" || w.sport === "bike") && w.status === "planned");
+
+  async function push(wo: Workout) {
+    try {
+      const r = await api.pushWorkout(wo.id);
+      setCoachMsg(`📤 „${wo.name}" е качена в intervals.icu за ${r.date} — часовникът ще я дръпне при следващото синхронизиране.`);
+    } catch (e: any) { setCoachMsg(`❌ ${e.message}`); }
+  }
 
   async function timeCheck(factor: number) {
     localStorage.setItem(timeCheckKey(), "1");
@@ -94,7 +105,8 @@ export default function Today() {
       )}
 
       {today.map((wo) => (
-        <WorkoutCard key={wo.id} wo={wo} ftp={zones.ftp_w} onRate={setRating} onSkip={skip} />
+        <WorkoutCard key={wo.id} wo={wo} ftp={zones.ftp_w} onRate={setRating} onSkip={skip}
+          onPush={canPush ? push : undefined} />
       ))}
 
       {upcoming.length > 0 && (

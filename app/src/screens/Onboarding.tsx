@@ -66,7 +66,7 @@ type Draft = {
   maxHr: string; restingHr: string; vo2max: string; ftp: string; lthr: string;
   raceDist: string; raceMin: string; raceSec: string;
   weeklyHours: number; days: number[]; level: string; strength: boolean; stretching: boolean;
-  strengthSetting: "home" | "dumbbells" | "gym";
+  strengthSetting: "home" | "dumbbells" | "gym"; restToday: boolean;
   hasRace: boolean; raceName: string; raceDate: string; weeks: number;
   runGoalType: string; runDistance: string; targetH: string; targetM: string; targetS: string;
   paceM: string; paceS: string; bikeGoalType: string;
@@ -78,7 +78,7 @@ const init: Draft = {
   maxHr: "", restingHr: "", vo2max: "", ftp: "", lthr: "",
   raceDist: "", raceMin: "", raceSec: "",
   weeklyHours: 5, days: [0, 2, 4, 6], level: "", strength: false, stretching: false,
-  strengthSetting: "home",
+  strengthSetting: "home", restToday: false,
   hasRace: false, raceName: "", raceDate: "", weeks: 8,
   runGoalType: "race_time", runDistance: "10k", targetH: "0", targetM: "50", targetS: "0",
   paceM: "5", paceS: "30", bikeGoalType: "ftp",
@@ -137,6 +137,7 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
       strength_enabled: d.strength,
       strength_setting: d.strengthSetting,
       stretching_enabled: d.stretching,
+      rest_today: d.restToday,
       equipment: d.eq,
       goal: {
         run_goal_type: isRun ? (d.runGoalType as any) : null,
@@ -497,6 +498,18 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
               {d.hasRace ? ` · 🏁 ${d.raceName}` : ` · ${d.weeks} седмици план`}
             </p>
           </div>
+          <h2 className="mt">А днес?</h2>
+          <div className="opts cols2" style={{ marginBottom: 14 }}>
+            <button className={`opt ${!d.restToday ? "selected" : ""}`} onClick={() => set({ restToday: false })}>
+              <span className="t">🏃 Може тренировка</span>
+              <span className="d">Ако днес е твой тренировъчен ден, планът започва веднага</span>
+            </button>
+            <button className={`opt ${d.restToday ? "selected" : ""}`} onClick={() => set({ restToday: true })}>
+              <span className="t">😌 Днес почивка</span>
+              <span className="d">Първата тренировка е от утре нататък</span>
+            </button>
+          </div>
+
           {weeksWarning && <div className="warning">⚠️ <span>{weeksWarning}</span></div>}
           {warnings.map((w, i) => <div className="warning" key={i}>⚠️ <span>{w}</span></div>)}
           {err && <div className="warning">❌ <span>{err}</span></div>}

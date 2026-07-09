@@ -15,7 +15,8 @@ from __future__ import annotations
 
 from .models import (BikeGoalType, Plan, PlanWeek, Profile, Segment,
                      SegmentType, TargetKind, Workout)
-from .planning import level_params, phase_for_week, place_days, plan_length_weeks, week_hours
+from .planning import (level_params, phase_for_week, place_days,
+                       plan_length_weeks, week_available_days, week_hours)
 from .zones import LTHR_ZONES, MAXHR_ZONES, resolve_zones
 
 # RPE equivalents per power zone (Borg CR10-ish)
@@ -170,7 +171,7 @@ def generate_bike_plan(profile: Profile) -> Plan:
         hours = week_hours(profile, w, total_weeks, phase) * bike_share
         minutes = round(hours * 60)
         n_rides = max(2, min(6, round(minutes / 65)))
-        days = place_days(profile.available_days, n_rides)
+        days = place_days(week_available_days(profile, w), n_rides)
         long_day = days[-1]
         other_days = [d for d in days if d != long_day]
         step = max(0, (w - 1) - (w - 1) // 4)

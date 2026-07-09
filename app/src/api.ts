@@ -92,6 +92,18 @@ export const api = {
       body: JSON.stringify({ api_key, athlete_id }),
     }),
   intervalsStatus: () => req<{ connected: boolean }>("/api/integrations/intervals"),
+  connectGarmin: (email: string, password: string) =>
+    req<{ connected: boolean; athlete: { name: string } }>("/api/integrations/garmin", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    }),
+  garminStatus: () => req<{ connected: boolean }>("/api/integrations/garmin"),
+  disconnectGarmin: () =>
+    req<{ connected: boolean }>("/api/integrations/garmin", { method: "DELETE" }),
+  pushWorkout: (id: number) =>
+    req<{ pushed: number; date: string }>(`/api/integrations/intervals/push-workout/${id}`, {
+      method: "POST",
+    }),
   syncActivities: () =>
     req<{ synced: number; matched: { workout: string; activity: string; date: string }[]; messages: string[] }>(
       "/api/sync/activities", { method: "POST" },

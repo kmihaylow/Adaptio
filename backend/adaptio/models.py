@@ -129,6 +129,7 @@ class Profile(BaseModel):
     training_level: Optional[TrainingLevel] = None
     strength_enabled: bool = False    # add 1-2 short strength sessions weekly?
     strength_setting: StrengthSetting = StrengthSetting.home
+    rest_today: bool = False          # start the plan tomorrow, keep today free
     stretching_enabled: bool = False  # add short stretching/mobility sessions?
 
     @property
