@@ -5,3 +5,4 @@ python-dotenv>=1.0
 pydantic>=2.6
 anthropic>=0.5
 python-multipart
+fitdecode

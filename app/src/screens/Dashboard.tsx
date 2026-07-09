@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { Dashboard as Dash, LastAnalysis } from "../types";
+import type { ActualActivity, ComparisonRow, Dashboard as Dash, LastAnalysis } from "../types";
 import { api, fmtPace } from "../api";
 
 const PHASE_BG: Record<string, string> = {
@@ -21,6 +21,9 @@ export default function Dashboard() {
   const [aiBusy, setAiBusy] = useState(false);
   const [aiErr, setAiErr] = useState("");
   const [uploadMsg, setUploadMsg] = useState("");
+  const [adhoc, setAdhoc] = useState<{ activity: ActualActivity; analysis: ComparisonRow[] } | null>(null);
+  const [adhocAi, setAdhocAi] = useState<AiReview | null>(null);
+  const [adhocBusy, setAdhocBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function load() {
@@ -45,12 +48,22 @@ export default function Dashboard() {
 
   async function onUpload(f: File) {
     setUploadMsg("⏳ Обработвам файла...");
+    setAdhoc(null); setAdhocAi(null);
     try {
       const r = await api.uploadActivity(f);
       setUploadMsg(r.synced > 0 ? "✅ Тренировката е разпозната и отбелязана!" : "");
       if (r.messages?.length) setCoachMsgs((m) => [...m, ...r.messages]);
       if (r.synced > 0) { setAi(null); load(); }
+      else if (r.analysis?.length) setAdhoc({ activity: r.activity, analysis: r.analysis });
     } catch (e: any) { setUploadMsg(`❌ ${e.message}`); }
+  }
+
+  async function adhocAnalysis() {
+    if (!adhoc) return;
+    setAdhocBusy(true);
+    try { setAdhocAi(await api.analysisAdhocAI(adhoc.activity)); }
+    catch (e: any) { setUploadMsg(`❌ ${e.message}`); }
+    setAdhocBusy(false);
   }
 
   if (err) return (
@@ -142,12 +155,41 @@ export default function Dashboard() {
           </p>
         )}
 
-        <input ref={fileRef} type="file" accept=".tcx,.gpx" style={{ display: "none" }}
+        <input ref={fileRef} type="file" accept=".fit,.tcx,.gpx" style={{ display: "none" }}
           onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f); e.target.value = ""; }} />
         <button className="btn small ghost mt" onClick={() => fileRef.current?.click()}>
-          📎 Качи тренировка (.tcx / .gpx)
+          📎 Качи тренировка (.fit / .tcx / .gpx)
         </button>
         {uploadMsg && <p className="hint mt">{uploadMsg}</p>}
+
+        {adhoc && (
+          <>
+            <p className="sub mt"><b>Анализ на качената активност</b> (няма планирана за тази дата):</p>
+            <ul className="seg-list">
+              {adhoc.analysis.map((row, i) => (
+                <li key={i} style={{ display: "block" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                    <span>{VERDICT_ICON[row.verdict]} <b>{row.metric}</b></span>
+                    <span style={{ whiteSpace: "nowrap" }}>{row.planned} → <b>{row.actual}</b></span>
+                  </div>
+                  <div className="hint" style={{ marginTop: 2 }}>{row.comment}</div>
+                </li>
+              ))}
+            </ul>
+            {!adhocAi ? (
+              <button className="btn small mt" disabled={adhocBusy} onClick={adhocAnalysis}>
+                {adhocBusy ? <span className="spin">⚙️</span> : "🧠 Дълбок анализ от треньора"}
+              </button>
+            ) : (
+              <div className="coach-note mt">
+                <p><b>{adhocAi.verdict}</b> · Изпълнение: {adhocAi.execution_score}/10</p>
+                {adhocAi.strengths.map((s, i) => <p key={`s${i}`} style={{ marginTop: 6 }}>👍 {s}</p>)}
+                {adhocAi.improvements.map((s, i) => <p key={`i${i}`} style={{ marginTop: 6 }}>🔧 {s}</p>)}
+                <p style={{ marginTop: 8 }}><b>Напред:</b> {adhocAi.next_advice}</p>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       <div className="card">
