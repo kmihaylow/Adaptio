@@ -50,6 +50,22 @@ export default function Dashboard() {
     setAiBusy(false);
   }
 
+  async function fetchLast() {
+    setUploadMsg("⏳ Свалям последната тренировка...");
+    setAdhoc(null); setAdhocAi(null);
+    try {
+      const r = await api.fetchLastActivity();
+      if (r.messages?.length) setCoachMsgs((m) => [...m, ...r.messages]);
+      if (r.matched) {
+        setUploadMsg(`✅ „${r.matched.workout}" е отбелязана (планирана за ${r.matched.planned_date}).`);
+        setAi(null); load();
+      } else {
+        setUploadMsg("");
+        setAdhoc({ activity: r.activity, analysis: r.analysis });
+      }
+    } catch (e: any) { setUploadMsg(`❌ ${e.message}`); }
+  }
+
   async function onUpload(f: File) {
     setUploadMsg("⏳ Обработвам файла...");
     setAdhoc(null); setAdhocAi(null);
@@ -168,9 +184,14 @@ export default function Dashboard() {
 
         <input ref={fileRef} type="file" accept=".fit,.tcx,.gpx" style={{ display: "none" }}
           onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f); e.target.value = ""; }} />
-        <button className="btn small ghost mt" onClick={() => fileRef.current?.click()}>
-          📎 Качи тренировка (.fit / .tcx / .gpx)
-        </button>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+          <button className="btn small" onClick={fetchLast}>
+            ⬇️ Свали последната тренировка
+          </button>
+          <button className="btn small ghost" onClick={() => fileRef.current?.click()}>
+            📎 Качи файл (.fit / .tcx / .gpx)
+          </button>
+        </div>
         {uploadMsg && <p className="hint mt">{uploadMsg}</p>}
 
         {adhoc && (

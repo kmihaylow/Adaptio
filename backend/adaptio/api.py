@@ -319,6 +319,26 @@ def _compare_plan_actual(wo: dict, zones: dict) -> list[dict]:
         rows.append({"metric": "Продължителност", "planned": f"{planned_min} мин",
                      "actual": f"{actual_min} мин", "verdict": verdict, "comment": comment})
 
+    if act.get("distance_km"):
+        rows.append({"metric": "Дистанция", "planned": "—",
+                     "actual": f"{act['distance_km']} км", "verdict": "ok",
+                     "comment": "Планът задава време и интензивност; дистанцията е следствие."})
+
+    intensity = adaptation.classify_intensity(act, zones)
+    if intensity != "unknown":
+        wanted_hard = wo["kind"] in ("threshold", "vo2max", "intervals", "tempo")
+        match = (intensity == "hard") == wanted_hard
+        rows.append({
+            "metric": "Интензивност",
+            "planned": "качествена" if wanted_hard else "лека/аеробна",
+            "actual": "качествена" if intensity == "hard" else "лека/аеробна",
+            "verdict": "ok" if match else ("over" if intensity == "hard" else "under"),
+            "comment": ("Сесията е изпълнила ролята си в седмицата." if match else
+                        "Лека тренировка, направена тежко — открадва от следващата качествена."
+                        if intensity == "hard" else
+                        "Качествена сесия, останала в лека зона — стимулът е по-малък от заложения."),
+        })
+
     main = _primary_target(wo)
     if main and act.get("pace_s_per_km") and main["target_kind"] == "pace":
         pace = act["pace_s_per_km"]
@@ -356,11 +376,13 @@ def _compare_plan_actual(wo: dict, zones: dict) -> list[dict]:
             rows.append({"metric": "Пулс", "planned": f"Z2: {z2[0]}–{z2[1]} уд/мин",
                          "actual": f"{round(act['avg_hr'])} уд/мин", "verdict": verdict, "comment": comment})
 
-    if act.get("load") and wo.get("load_hint"):
-        r = act["load"] / wo["load_hint"]
+    load = adaptation.estimate_load(act, zones)
+    if load and wo.get("load_hint"):
+        r = load / wo["load_hint"]
         verdict = "ok" if 0.7 <= r <= 1.3 else ("over" if r > 1.3 else "under")
+        est = "" if act.get("load") else " (оценка по пулса)"
         rows.append({"metric": "Натоварване (TSS)", "planned": str(wo["load_hint"]),
-                     "actual": str(act["load"]), "verdict": verdict,
+                     "actual": f"{load}{est}", "verdict": verdict,
                      "comment": "Общият стрес съответства на плана." if verdict == "ok"
                      else "Общият стрес се разминава с плана — виж горните редове защо."})
     return rows
@@ -373,6 +395,21 @@ def _analyze_standalone(act: dict, zones: dict) -> list[dict]:
     rows.append({"metric": "Продължителност", "planned": "—",
                  "actual": f"{act['moving_time_min']} мин", "verdict": "ok",
                  "comment": "Непланирана активност — няма план за сравнение."})
+    if act.get("distance_km"):
+        rows.append({"metric": "Дистанция", "planned": "—",
+                     "actual": f"{act['distance_km']} км", "verdict": "ok", "comment": ""})
+    intensity = adaptation.classify_intensity(act, zones)
+    load = adaptation.estimate_load(act, zones)
+    if intensity != "unknown":
+        rows.append({"metric": "Интензивност", "planned": "—",
+                     "actual": "качествена" if intensity == "hard" else "лека/аеробна",
+                     "verdict": "ok" if intensity == "easy" else "over",
+                     "comment": ("Лека сесия — чист аеробен бонус." if intensity == "easy" else
+                                 "Тежка сесия извън плана — брой я като качествена за тази седмица.")})
+    if load:
+        rows.append({"metric": "Натоварване (TSS)", "planned": "—",
+                     "actual": f"{load}{'' if act.get('load') else ' (оценка по пулса)'}",
+                     "verdict": "ok", "comment": ""})
     if act.get("pace_s_per_km") and zones.get("run_paces_s_per_km"):
         easy = zones["run_paces_s_per_km"].get("easy")
         thr = zones["run_paces_s_per_km"].get("threshold")
@@ -577,6 +614,12 @@ def _apply_matches(workouts: list[dict], acts: list[dict]) -> tuple[list, list[s
     pairs = activity_sync.match_activities(workouts, acts)
     messages: list[str] = []
     for wo, act in pairs:
+        if wo["date"] != act["date"]:
+            messages.append(
+                f"„{wo['name']}“ беше планирана за {wo['date']}, а е направена на {act['date']} — "
+                "приех я за изпълнена. Един ден разлика не променя нищо; само внимавай "
+                "две тежки тренировки да не се залепят една за друга."
+            )
         wo["actual"] = act
         db.update_workout(wo["id"], data=wo, status="done")
         upcoming = [Workout.model_validate(w) for w in workouts
@@ -625,6 +668,68 @@ def sync_activities(user: str = Depends(current_user)):
                      "activity": a["name"], "date": a["date"]} for w, a in pairs],
         "messages": messages + errors,
     }
+
+
+@app.post("/api/sync/last-activity")
+def sync_last_activity(user: str = Depends(current_user)):
+    """Fetch THE most recent activity from the connected sources and process it
+    fully: match (±1 day tolerance) → plan-vs-actual, or standalone analysis +
+    a continuation decision for the rest of the plan (изискване: разминаващи се
+    дни не бива да чупят нищо)."""
+    intervals_creds = db.load_integration(user, "intervals")
+    garmin_creds = db.load_integration(user, "garmin")
+    if not intervals_creds and not garmin_creds:
+        raise HTTPException(400, "Нито intervals.icu, нито Garmin Connect е свързан.")
+    row = db.active_plan(user)
+    if not row:
+        raise HTTPException(404, "Няма активен план.")
+    _, meta, workouts = row
+    workouts = _with_dates(meta, workouts)
+    zones = meta.get("zones", {})
+
+    acts: list[dict] = []
+    errors: list[str] = []
+    if intervals_creds:
+        try:
+            acts += IntervalsClient(intervals_creds["api_key"],
+                                    intervals_creds["athlete_id"]).activities()
+        except Exception:
+            errors.append("intervals.icu не отговори.")
+    if garmin_creds:
+        try:
+            acts += GarminClient(garmin_creds["email"], garmin_creds["password"]).activities()
+        except GarminError as e:
+            errors.append(str(e))
+    acts = activity_sync.dedupe_activities(acts)
+    if not acts:
+        raise HTTPException(404, " ".join(errors) or
+                            "Няма нито една активност в последните 14 дни.")
+    last = max(acts, key=lambda a: a["date"])
+
+    from .models import Workout
+    pairs, messages = _apply_matches(workouts, [last])
+    if pairs:
+        wo, _ = pairs[0]
+        analysis = _compare_plan_actual(wo, zones)
+        matched = {"workout": wo["name"], "planned_date": wo["date"]}
+    else:
+        analysis = _analyze_standalone(last, zones)
+        matched = None
+        already = any((w.get("actual") or {}).get("activity_id") == last["activity_id"]
+                      or ((w.get("actual") or {}).get("date") == last["date"]
+                          and abs((w.get("actual") or {}).get("moving_time_min", 0)
+                                  - last["moving_time_min"]) <= 2)
+                      for w in workouts)
+        if already:
+            messages.append("Тази активност вече е синхронизирана и отчетена в плана.")
+        else:
+            upcoming = [Workout.model_validate(w) for w in workouts if w["status"] == "planned"]
+            changed, msgs = adaptation.plan_continuation(upcoming, last, zones)
+            for m in changed:
+                db.update_workout(m.id, data=m.model_dump(mode="json"))
+            messages += msgs
+    return {"activity": last, "matched": matched, "analysis": analysis,
+            "messages": messages + errors}
 
 
 @app.post("/api/sync/upload")

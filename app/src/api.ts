@@ -132,6 +132,11 @@ export const api = {
       { method: "POST", body: JSON.stringify({ activity }) },
     ),
   analysisLast: () => req<LastAnalysis>("/api/analysis/last"),
+  fetchLastActivity: () =>
+    req<{ activity: ActualActivity; matched: { workout: string; planned_date: string } | null;
+          analysis: ComparisonRow[]; messages: string[] }>(
+      "/api/sync/last-activity", { method: "POST" },
+    ),
   analysisAI: () =>
     req<{ verdict: string; execution_score: number; strengths: string[];
           improvements: string[]; next_advice: string }>(
