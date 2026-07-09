@@ -156,6 +156,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); height: 34px; }
 .wo { border-left: 4px solid var(--line); }
 .wo.run { border-left-color: var(--run); }
 .wo.bike { border-left-color: var(--bike); }
+.wo.strength { border-left-color: #b388ff; }
 .wo-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .wo-name { font-weight: 800; font-size: 1.04rem; }
 .wo-meta { color: var(--muted); font-size: .82rem; white-space: nowrap; }

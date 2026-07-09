@@ -65,7 +65,8 @@ prompts.
 2. Capacitor wrap of `app/` for App Store / Google Play.
 3. ~~Auto-import completed activities from intervals.icu~~ done: activity_sync.py,
    POST /api/sync/activities, auto-runs on dashboard load.
-4. Strength workouts (sport-specific, demo links) — proposal in docs/.
+4. ~~Strength workouts~~ done: strength.py (opt-in at onboarding, sport-specific
+   catalog, max 2/wk on free days, never before quality/long, YouTube demo links).
 5. Direct Garmin Connect Developer Program integration (application pending — Garmin paused new requests mid-2026).
 6. Stripe subscriptions (€5/mo founding price).
 

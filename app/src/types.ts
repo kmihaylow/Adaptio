@@ -33,8 +33,17 @@ export interface Profile {
   available_days: number[];
   experience_years: number;
   currently_training: boolean;
+  strength_enabled: boolean;
   equipment: Equipment;
   goal: Goal;
+}
+
+export interface Exercise {
+  name: string;
+  sets: number;
+  reps: string;
+  note: string;
+  demo_url: string;
 }
 
 export interface WeeklyProgress {
@@ -91,12 +100,13 @@ export interface Workout {
   plan_week: number;
   day_of_week: number;
   date: string;
-  sport: "run" | "bike";
+  sport: "run" | "bike" | "strength";
   name: string;
   kind: string;
   duration_min: number;
   description: string;
   segments: Segment[];
+  exercises?: Exercise[];
   status: "planned" | "done" | "skipped";
   load_hint: number;
   actual?: ActualActivity | null;
