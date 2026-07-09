@@ -117,6 +117,86 @@ def rebalance_after_actual(upcoming: list[Workout], done_workout: dict,
     return changed, messages
 
 
+def classify_intensity(act: dict, zones: dict) -> str:
+    """'easy' | 'hard' | 'unknown' from whatever signals the activity carries."""
+    ftp = zones.get("ftp_w")
+    if act.get("avg_watts") and ftp:
+        return "hard" if act["avg_watts"] >= 0.85 * ftp else "easy"
+    thr = (zones.get("run_paces_s_per_km") or {}).get("threshold")
+    easy = (zones.get("run_paces_s_per_km") or {}).get("easy")
+    if act.get("pace_s_per_km"):
+        if thr and act["pace_s_per_km"] <= thr[0] + 10:
+            return "hard"
+        if easy and act["pace_s_per_km"] >= easy[1] - 15:
+            return "easy"
+    z2 = (zones.get("hr_bpm") or {}).get("z2_endurance")
+    if act.get("avg_hr") and z2:
+        return "hard" if act["avg_hr"] > z2[1] + 5 else "easy"
+    return "unknown"
+
+
+def estimate_load(act: dict, zones: dict) -> int | None:
+    """TSS-like estimate when the source didn't provide one: hrTSS approximation
+    IF ≈ avgHR / LTHR (LTHR ≈ 90% of max), TSS = hours × IF² × 100."""
+    if act.get("load"):
+        return round(act["load"])
+    max_hr = zones.get("max_hr_bpm")
+    if not (act.get("avg_hr") and max_hr and act.get("moving_time_min")):
+        return None
+    intensity = act["avg_hr"] / (0.9 * max_hr)
+    return round(act["moving_time_min"] / 60 * intensity ** 2 * 100)
+
+
+def plan_continuation(upcoming: list[Workout], act: dict,
+                      zones: dict) -> tuple[list[Workout], list[str]]:
+    """The athlete did something the plan didn't schedule (day mismatch beyond
+    tolerance, or an extra session). Decide how the plan continues:
+
+    - a HARD unplanned session counts as this week's quality stimulus → the
+      quality sessions in the next 2 days ease off and the athlete is told to
+      treat tomorrow as easy;
+    - a LONG unplanned session (recovery cost regardless of intensity) → same
+      easing, framed around fatigue;
+    - an easy, normal-sized session → costs nothing, say so.
+    Returns (changed_workouts_to_persist, coach_messages)."""
+    import datetime as dt
+
+    intensity = classify_intensity(act, zones)
+    load = estimate_load(act, zones)
+    planned_days = [w for w in upcoming if w.status == "planned" and w.date]
+    avg_day_min = (sum(w.duration_min for w in planned_days) / len(planned_days)) if planned_days else 60
+    is_long = act["moving_time_min"] >= 1.5 * avg_day_min
+
+    changed: list[Workout] = []
+    messages: list[str] = []
+    if intensity == "hard" or is_long:
+        act_date = dt.date.fromisoformat(act["date"])
+        horizon = {(act_date + dt.timedelta(days=i)).isoformat() for i in (1, 2)}
+        targets = [w for w in planned_days if w.date and w.date.isoformat() in horizon]
+        if apply_adjustment(targets, 0.95):
+            changed = targets
+        reason = ("тежка (качествена) сесия" if intensity == "hard" else
+                  f"дълга сесия (~{act['moving_time_min']} мин при обичайни ~{round(avg_day_min)})")
+        messages.append(
+            f"Непланираната активност е {reason}"
+            + (f" с натоварване ~{load} TSS" if load else "") + ". "
+            "Броя я за реален тренировъчен стрес: качествените тренировки в следващите "
+            "2 дни са облекчени с ~5%, а утрешният ден го карай подчертано леко — "
+            "адаптацията се случва в почивката след стреса, не в трупането му."
+        )
+    elif intensity == "easy":
+        messages.append(
+            "Непланираната активност е в лека/аеробна зона и с нормален обем — "
+            "чист бонус за базата, планът продължава без промени."
+        )
+    else:
+        messages.append(
+            "Активността няма пулс/мощност/темпо данни, по които да преценя интензивността — "
+            "планът остава непроменен. Ако е била тежка, прецени сам да облекчиш следващия ден."
+        )
+    return changed, messages
+
+
 def evaluate_ratings(recent: list[dict]) -> tuple[float | None, str | None]:
     """Decide on an adjustment from the rating history (newest last).
 

@@ -25,17 +25,25 @@ def dedupe_activities(activities: list[dict]) -> list[dict]:
     return out
 
 
-def match_activities(workouts: list[dict], activities: list[dict]) -> list[tuple[dict, dict]]:
+def match_activities(workouts: list[dict], activities: list[dict],
+                     day_tolerance: int = 1) -> list[tuple[dict, dict]]:
     """Return (workout, activity) pairs to persist.
 
-    Workouts must already carry their computed `date`. Activities that were
-    synced before (same activity_id) or have no same-day planned workout are
-    skipped — an unplanned ride shouldn't tick off a rest day.
+    Workouts must already carry their computed `date`. Exact-date matches win;
+    within `day_tolerance` days a same-sport planned workout still counts —
+    life shifts sessions by a day all the time. Activities synced before (same
+    activity_id, or the same session from another source) are skipped, and an
+    unplanned ride never ticks off a rest day.
     """
+    import datetime as dt
+
     stored = [w["actual"] for w in workouts if w.get("actual")]
     already_synced = {a["activity_id"] for a in stored}
     pairs: list[tuple[dict, dict]] = []
     taken: set[int] = set()
+
+    def _days_apart(a: str, b: str) -> int:
+        return abs((dt.date.fromisoformat(a) - dt.date.fromisoformat(b)).days)
 
     def _is_stored_dup(act: dict) -> bool:
         """Same session synced earlier from another source under another id."""
@@ -49,12 +57,13 @@ def match_activities(workouts: list[dict], activities: list[dict]) -> list[tuple
         candidates = [
             w for w in workouts
             if w["id"] not in taken and not w.get("actual")
-            and w["date"] == act["date"] and w["sport"] == act["sport"]
-            and w["status"] in ("planned", "done")
+            and w["sport"] == act["sport"] and w["status"] in ("planned", "done")
+            and _days_apart(w["date"], act["date"]) <= day_tolerance
         ]
         if not candidates:
             continue
-        best = min(candidates, key=lambda w: abs(w["duration_min"] - act["moving_time_min"]))
+        best = min(candidates, key=lambda w: (_days_apart(w["date"], act["date"]),
+                                              abs(w["duration_min"] - act["moving_time_min"])))
         taken.add(best["id"])
         pairs.append((best, act))
     return pairs
