@@ -13,7 +13,7 @@ export interface Goal {
   run_distance?: "5k" | "10k" | "half_marathon" | "marathon" | null;
   target_time_s?: number | null;
   target_pace_s_per_km?: number | null;
-  bike_goal_type?: "ftp" | "endurance" | "vo2max" | null;
+  bike_goal_type?: "ftp" | "endurance" | "vo2max" | "general" | "mixed" | null;
   race?: { name: string; date: string } | null;
   weeks?: number | null;
 }
@@ -23,6 +23,7 @@ export interface Profile {
   age: number;
   sex: "male" | "female" | "other";
   weight_kg: number;
+  height_cm?: number | null;
   max_hr_bpm?: number | null;
   resting_hr_bpm?: number | null;
   vo2max?: number | null;
@@ -33,7 +34,10 @@ export interface Profile {
   available_days: number[];
   experience_years: number;
   currently_training: boolean;
+  training_level?: "beginner" | "occasional" | "regular" | "athlete" | null;
   strength_enabled: boolean;
+  strength_setting?: "home" | "dumbbells" | "gym";
+  stretching_enabled: boolean;
   equipment: Equipment;
   goal: Goal;
 }
@@ -44,6 +48,21 @@ export interface Exercise {
   reps: string;
   note: string;
   demo_url: string;
+}
+
+export interface ComparisonRow {
+  metric: string;
+  planned: string;
+  actual: string;
+  verdict: "ok" | "over" | "under";
+  comment: string;
+}
+
+export interface LastAnalysis {
+  workout: { id: number; name: string; kind: string; sport: string; date: string;
+             duration_min: number; description: string };
+  actual: ActualActivity;
+  comparison: ComparisonRow[];
 }
 
 export interface WeeklyProgress {
@@ -100,7 +119,7 @@ export interface Workout {
   plan_week: number;
   day_of_week: number;
   date: string;
-  sport: "run" | "bike" | "strength";
+  sport: "run" | "bike" | "strength" | "stretching";
   name: string;
   kind: string;
   duration_min: number;

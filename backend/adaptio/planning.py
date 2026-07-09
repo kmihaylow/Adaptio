@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from .models import Goal, Profile, RunDistance
+from .models import Goal, Profile, RunDistance, TrainingLevel
 
 # Minimum sensible plan length (weeks) before the goal is realistic.
 MIN_WEEKS_RUN = {
@@ -18,7 +18,24 @@ MIN_WEEKS_RUN = {
     RunDistance.half: 10,
     RunDistance.marathon: 14,
 }
-MIN_WEEKS_BIKE = {"ftp": 6, "endurance": 8, "vo2max": 6}
+MIN_WEEKS_BIKE = {"ftp": 6, "endurance": 8, "vo2max": 6, "general": 4, "mixed": 8}
+
+# How the plan starts and ramps by training background. An experienced coach
+# never gives a beginner and a seasoned athlete the same first month:
+#   start      — first-week volume as share of the athlete's budget
+#   ramp       — weekly volume multiplier (≤ ~10%/wk even for athletes)
+#   base_share — how much of the plan is base phase (movement/aerobic re-build)
+#   max_quality— hard sessions per week the background can absorb
+LEVEL_PARAMS = {
+    TrainingLevel.beginner: {"start": 0.70, "ramp": 1.06, "base_share": 0.45, "max_quality": 1},
+    TrainingLevel.occasional: {"start": 0.80, "ramp": 1.08, "base_share": 0.40, "max_quality": 1},
+    TrainingLevel.regular: {"start": 0.92, "ramp": 1.08, "base_share": 0.30, "max_quality": 2},
+    TrainingLevel.athlete: {"start": 1.00, "ramp": 1.09, "base_share": 0.22, "max_quality": 2},
+}
+
+
+def level_params(profile: Profile) -> dict:
+    return LEVEL_PARAMS[profile.level]
 
 
 def plan_length_weeks(goal: Goal, today: dt.date | None = None) -> tuple[int, list[str]]:
@@ -52,11 +69,11 @@ def plan_length_weeks(goal: Goal, today: dt.date | None = None) -> tuple[int, li
     return weeks, warnings
 
 
-def phase_for_week(week: int, total: int, has_race: bool, trained: bool = False) -> str:
+def phase_for_week(week: int, total: int, has_race: bool, base_share: float = 0.4) -> str:
     """base → build → peak → taper, recovery every 4th week (not in taper).
 
-    Athletes who already train regularly need less base (re-)building, so their
-    base phase is shorter and quality work starts earlier."""
+    `base_share` comes from LEVEL_PARAMS: trained athletes need less base
+    (re-)building, so quality work starts earlier for them."""
     taper_weeks = 0
     if has_race:
         taper_weeks = 1 if total <= 10 else 2
@@ -65,7 +82,6 @@ def phase_for_week(week: int, total: int, has_race: bool, trained: bool = False)
     if week % 4 == 0 and week < total - taper_weeks:
         return "recovery"
     working = total - taper_weeks
-    base_share = 0.25 if trained else 0.4
     if week <= max(1, round(working * base_share)):
         return "base"
     if week <= max(2, round(working * 0.75)):
@@ -78,12 +94,12 @@ def week_hours(profile: Profile, week: int, total: int, phase: str) -> float:
 
     Recovery weeks drop to ~65%, taper to ~55% of the athlete's budget — enough
     stimulus to hold fitness while fatigue drains (Mujika & Padilla, 2003).
-    Athletes already training regularly skip the cautious ramp-in and start
-    near their full budget.
+    Starting volume and ramp rate come from the athlete's training background
+    (LEVEL_PARAMS) — a beginner eases in at 70%, an athlete starts at budget.
     """
     budget = profile.weekly_hours
-    start = 0.92 if profile.currently_training else 0.8
-    base = min(budget, budget * start * (1.08 ** (week - 1)))
+    lp = level_params(profile)
+    base = min(budget, budget * lp["start"] * (lp["ramp"] ** (week - 1)))
     if phase == "recovery":
         return round(budget * 0.65, 1)
     if phase == "taper":

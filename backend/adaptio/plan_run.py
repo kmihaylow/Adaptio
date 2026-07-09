@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from .models import (Goal, Plan, PlanWeek, Profile, RunDistance, RunGoalType,
                      Segment, SegmentType, TargetKind, Workout)
-from .planning import phase_for_week, place_days, plan_length_weeks, week_hours
+from .planning import level_params, phase_for_week, place_days, plan_length_weeks, week_hours
 from .zones import resolve_zones
 
 EASY_PACE_HR_NOTE = "Говорно темпо — трябва да можеш да водиш разговор (Z2)."
@@ -114,11 +114,12 @@ def generate_run_plan(profile: Profile) -> Plan:
         )
 
     run_share = 1.0 if profile.sport.value == "run" else 0.5
+    lp = level_params(profile)
     weeks: list[PlanWeek] = []
     workouts: list[Workout] = []
 
     for w in range(1, total_weeks + 1):
-        phase = phase_for_week(w, total_weeks, has_race, profile.currently_training)
+        phase = phase_for_week(w, total_weeks, has_race, lp["base_share"])
         hours = week_hours(profile, w, total_weeks, phase) * run_share
         minutes = round(hours * 60)
         n_runs = max(2, min(6, round(minutes / 50)))
@@ -129,6 +130,7 @@ def generate_run_plan(profile: Profile) -> Plan:
             mid = [d for d in days if d != long_day]
             quality_days = [mid[len(mid) // 2]] if len(mid) < 4 or phase in ("base", "recovery") \
                 else [mid[0], mid[-1]]
+            quality_days = quality_days[:lp["max_quality"]]
 
         long_min = min(round(minutes * 0.32), 150 if profile.goal.run_distance == RunDistance.marathon else 110)
         long_min = max(35, long_min)

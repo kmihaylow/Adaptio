@@ -36,7 +36,13 @@ app/ (React+Vite PWA, Bulgarian UI)
   before races.
 - Cycling: Coggan zones from FTP. Goal tracks: FTP (sweet spot → threshold
   ladders), endurance (Z2 volume + low-cadence strength), VO2max (3-5 min
-  interval ladders). Volume ramp ≤ ~8%/week.
+  interval ladders), general (maintenance, 1 mild quality/wk), mixed (rotates
+  all three systems). Volume ramp ≤ ~8%/week.
+- Training level (beginner/occasional/regular/athlete, planning.LEVEL_PARAMS)
+  sets starting volume (70-100% of budget), ramp, base-phase length and the
+  weekly quality-session cap.
+- "Both" sport is implemented but hidden in the UI (SHOW_BOTH_SPORT flag in
+  Onboarding.tsx) until it gets more polish.
 - Equipment cascade: power meter/smart trainer → watt targets (+ .zwo);
   HR device → HR zones (LTHR if known, else max HR, else Tanaka estimate);
   nothing → RPE.
@@ -64,7 +70,11 @@ prompts.
 1. Hosted deploy (Fly.io/Railway + Netlify); upgrade session auth to Supabase/FastAPI-Users.
 2. Capacitor wrap of `app/` for App Store / Google Play.
 3. ~~Auto-import completed activities from intervals.icu~~ done: activity_sync.py,
-   POST /api/sync/activities, auto-runs on dashboard load.
+   POST /api/sync/activities, auto-runs on dashboard load. Manual .tcx/.gpx
+   upload (activity_upload.py) + last-activity analysis (deterministic
+   comparison + coach.analyze_activity Claude call) + deviation rebalancing
+   (adaptation.rebalance_after_actual) + daily time check
+   (adaptation.scale_workout_time) — groundwork for the GARMIN COACH merge.
 4. ~~Strength workouts~~ done: strength.py (opt-in at onboarding, sport-specific
    catalog, max 2/wk on free days, never before quality/long, YouTube demo links).
 5. Direct Garmin Connect Developer Program integration (application pending — Garmin paused new requests mid-2026).

@@ -5,17 +5,41 @@ import InfoTip, { TIPS } from "../components/InfoTip";
 
 const DAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"];
 
+// "И двете" is hidden for now — flip to true to bring it back instantly.
+const SHOW_BOTH_SPORT = false;
+
 const MIN_WEEKS: Record<string, number> = {
   "5k": 6, "10k": 8, half_marathon: 10, marathon: 14,
-  ftp: 6, endurance: 8, vo2max: 6,
+  ftp: 6, endurance: 8, vo2max: 6, general: 4, mixed: 8,
 };
+
+// realistic input ranges (mirror the backend's pydantic constraints)
+const LIMITS = {
+  age: [10, 90, "години"],
+  weight: [30, 200, "кг"],
+  height: [120, 220, "см"],
+  maxHr: [120, 220, "уд/мин"],
+  restingHr: [30, 100, "уд/мин"],
+  vo2max: [20, 90, ""],
+  ftp: [50, 500, "W"],
+  lthr: [100, 210, "уд/мин"],
+} as const;
+
+function rangeErr(key: keyof typeof LIMITS, value: string): string | null {
+  if (value === "") return null;
+  const [lo, hi, unit] = LIMITS[key];
+  const v = +value;
+  if (isNaN(v) || v < lo || v > hi) return `Въведи реална стойност: ${lo}–${hi} ${unit}`.trim();
+  return null;
+}
 
 type Draft = {
   sport: Sport | null;
-  age: string; sex: "male" | "female"; weight: string;
+  age: string; sex: "male" | "female"; weight: string; height: string;
   maxHr: string; restingHr: string; vo2max: string; ftp: string; lthr: string;
   raceDist: string; raceMin: string; raceSec: string;
-  weeklyHours: number; days: number[]; currentlyTraining: boolean; strength: boolean;
+  weeklyHours: number; days: number[]; level: string; strength: boolean; stretching: boolean;
+  strengthSetting: "home" | "dumbbells" | "gym";
   hasRace: boolean; raceName: string; raceDate: string; weeks: number;
   runGoalType: string; runDistance: string; targetH: string; targetM: string; targetS: string;
   paceM: string; paceS: string; bikeGoalType: string;
@@ -23,10 +47,11 @@ type Draft = {
 };
 
 const init: Draft = {
-  sport: null, age: "", sex: "male", weight: "",
+  sport: null, age: "", sex: "male", weight: "", height: "",
   maxHr: "", restingHr: "", vo2max: "", ftp: "", lthr: "",
   raceDist: "", raceMin: "", raceSec: "",
-  weeklyHours: 5, days: [0, 2, 4, 6], currentlyTraining: false, strength: false,
+  weeklyHours: 5, days: [0, 2, 4, 6], level: "", strength: false, stretching: false,
+  strengthSetting: "home",
   hasRace: false, raceName: "", raceDate: "", weeks: 8,
   runGoalType: "race_time", runDistance: "10k", targetH: "0", targetM: "50", targetS: "0",
   paceM: "5", paceS: "30", bikeGoalType: "ftp",
@@ -68,6 +93,7 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
     return {
       sport: d.sport!,
       age: +d.age, sex: d.sex, weight_kg: +d.weight,
+      height_cm: d.height ? +d.height : null,
       max_hr_bpm: d.maxHr ? +d.maxHr : null,
       resting_hr_bpm: d.restingHr ? +d.restingHr : null,
       vo2max: d.vo2max ? +d.vo2max : null,
@@ -79,8 +105,11 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
       weekly_hours: d.weeklyHours,
       available_days: d.days,
       experience_years: 0,
-      currently_training: d.currentlyTraining,
+      training_level: d.level as any,
+      currently_training: d.level === "regular" || d.level === "athlete",
       strength_enabled: d.strength,
+      strength_setting: d.strengthSetting,
+      stretching_enabled: d.stretching,
       equipment: d.eq,
       goal: {
         run_goal_type: isRun ? (d.runGoalType as any) : null,
@@ -107,12 +136,18 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
     }
   }
 
+  const step1Valid = !rangeErr("age", d.age) && d.age !== "" &&
+    !rangeErr("weight", d.weight) && d.weight !== "" &&
+    !rangeErr("height", d.height) && d.height !== "";
+  const step2Valid = !rangeErr("maxHr", d.maxHr) && !rangeErr("restingHr", d.restingHr) &&
+    !rangeErr("vo2max", d.vo2max) && !rangeErr("ftp", d.ftp) && !rangeErr("lthr", d.lthr);
+
   const canNext = [
     d.sport !== null,
-    +d.age >= 10 && +d.weight >= 30,
+    step1Valid,
+    step2Valid,
     true,
-    true,
-    d.days.length >= 2,
+    d.days.length >= 2 && d.level !== "",
     d.hasRace ? !!(d.raceName && d.raceDate) : d.weeks >= 2,
     true,
   ][step];
@@ -132,14 +167,14 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
             Твоят личен адаптивен треньор. Кой спорт тренираш?
           </p>
           <div className="opts">
-            {([["run", "🏃", "Бягане"], ["bike", "🚴", "Колоездене"], ["both", "🔥", "И двете"]] as const).map(
-              ([v, e, t]) => (
+            {([["run", "🏃", "Бягане"], ["bike", "🚴", "Колоездене"], ["both", "🔥", "И двете"]] as const)
+              .filter(([v]) => SHOW_BOTH_SPORT || v !== "both")
+              .map(([v, e, t]) => (
                 <button key={v} className={`opt ${d.sport === v ? "selected" : ""}`} onClick={() => set({ sport: v })}>
                   <span className="emoji">{e}</span>
                   <span className="t">{t}</span>
                 </button>
-              ),
-            )}
+              ))}
           </div>
         </>
       )}
@@ -149,6 +184,7 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
           <div className="field">
             <label>Възраст</label>
             <input type="number" inputMode="numeric" value={d.age} onChange={(e) => set({ age: e.target.value })} placeholder="напр. 34" />
+            {rangeErr("age", d.age) && <p className="hint" style={{ color: "var(--accent)" }}>{rangeErr("age", d.age)}</p>}
           </div>
           <div className="field">
             <label>Пол</label>
@@ -160,6 +196,13 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
           <div className="field">
             <label>Тегло (кг)</label>
             <input type="number" inputMode="decimal" value={d.weight} onChange={(e) => set({ weight: e.target.value })} placeholder="напр. 78" />
+            {rangeErr("weight", d.weight) && <p className="hint" style={{ color: "var(--accent)" }}>{rangeErr("weight", d.weight)}</p>}
+          </div>
+          <div className="field">
+            <label>Ръст (см)</label>
+            <input type="number" inputMode="numeric" value={d.height} onChange={(e) => set({ height: e.target.value })} placeholder="напр. 178" />
+            {rangeErr("height", d.height) && <p className="hint" style={{ color: "var(--accent)" }}>{rangeErr("height", d.height)}</p>}
+            <p className="hint">Нужен за BMI — един от най-важните маркери за формата.</p>
           </div>
         </>
       )}
@@ -172,24 +215,29 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
           <div className="field">
             <label>Максимален пулс (уд/мин) <InfoTip text={TIPS.maxHr} /></label>
             <input type="number" value={d.maxHr} onChange={(e) => set({ maxHr: e.target.value })} placeholder="празно = формула по възрастта" />
+            {rangeErr("maxHr", d.maxHr) && <p className="hint" style={{ color: "var(--accent)" }}>{rangeErr("maxHr", d.maxHr)}</p>}
           </div>
           <div className="field">
             <label>Пулс в покой <InfoTip text={TIPS.restingHr} /></label>
             <input type="number" value={d.restingHr} onChange={(e) => set({ restingHr: e.target.value })} placeholder="напр. 55" />
+            {rangeErr("restingHr", d.restingHr) && <p className="hint" style={{ color: "var(--accent)" }}>{rangeErr("restingHr", d.restingHr)}</p>}
           </div>
           <div className="field">
             <label>VO₂max <InfoTip text={TIPS.vo2max} /></label>
             <input type="number" value={d.vo2max} onChange={(e) => set({ vo2max: e.target.value })} placeholder="от часовника, напр. 45" />
+            {rangeErr("vo2max", d.vo2max) && <p className="hint" style={{ color: "var(--accent)" }}>{rangeErr("vo2max", d.vo2max)}</p>}
           </div>
           {isBike && (
             <>
               <div className="field">
                 <label>FTP (вата) <InfoTip text={TIPS.ftp} /></label>
                 <input type="number" value={d.ftp} onChange={(e) => set({ ftp: e.target.value })} placeholder="напр. 210" />
+                {rangeErr("ftp", d.ftp) && <p className="hint" style={{ color: "var(--accent)" }}>{rangeErr("ftp", d.ftp)}</p>}
               </div>
               <div className="field">
                 <label>LTHR (уд/мин) <InfoTip text={TIPS.lthr} /></label>
                 <input type="number" value={d.lthr} onChange={(e) => set({ lthr: e.target.value })} placeholder="напр. 168" />
+                {rangeErr("lthr", d.lthr) && <p className="hint" style={{ color: "var(--accent)" }}>{rangeErr("lthr", d.lthr)}</p>}
               </div>
             </>
           )}
@@ -240,18 +288,22 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
 
       {step === 4 && (
         <>
-          <h2>Тренираш ли редовно в момента?</h2>
-          <div className="opts cols2" style={{ marginBottom: 14 }}>
-            <button className={`opt ${d.currentlyTraining ? "selected" : ""}`}
-              onClick={() => set({ currentlyTraining: true })}>
-              <span className="t">💪 Да, тренирам</span>
-              <span className="d">Планът започва по-смело, с по-кратка базова фаза</span>
-            </button>
-            <button className={`opt ${!d.currentlyTraining ? "selected" : ""}`}
-              onClick={() => set({ currentlyTraining: false })}>
-              <span className="t">🌱 Не / отскоро</span>
-              <span className="d">Плавно навлизане — обемът се вдига постепенно</span>
-            </button>
+          <h2>Как тренираш в момента?</h2>
+          <p className="sub" style={{ marginBottom: 10 }}>
+            Това определя колко смело започва планът — начинаещ и атлет никога не получават една и съща първа седмица.
+          </p>
+          <div className="opts" style={{ marginBottom: 14 }}>
+            {([
+              ["beginner", "🌱 Не тренирам / започвам сега", "Плавно навлизане: 70% обем, дълга база, 1 качествена тренировка"],
+              ["occasional", "🚶 Спорадично (1-2 пъти седмично)", "Внимателен старт с постепенно навлизане в структура"],
+              ["regular", "🏃 Редовно (3-4 пъти, с постоянство)", "Стартираш близо до пълния обем, 2 качествени тренировки"],
+              ["athlete", "🏆 Атлет — години опит и състезания", "Пълен обем от първата седмица, минимална база, бърза прогресия"],
+            ] as const).map(([v, t, sub]) => (
+              <button key={v} className={`opt ${d.level === v ? "selected" : ""}`} onClick={() => set({ level: v })}>
+                <span className="t">{t}</span>
+                <span className="d">{sub}</span>
+              </button>
+            ))}
           </div>
           <h2>Колко време имаш седмично?</h2>
           <div className="card center">
@@ -270,18 +322,39 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
           </div>
           {d.days.length < 2 && <p className="hint mt">Избери поне 2 дни.</p>}
 
-          <h2 className="mt">Искаш ли и силови тренировки?</h2>
+          <h2 className="mt">Допълнителни модули</h2>
           <p className="sub" style={{ marginBottom: 10 }}>
-            1-2 кратки сесии седмично (~30 мин, вкъщи) — по-малко контузии и по-добра икономия на движението.
+            Кратки сесии, които пазят от контузии. Избери каквото ти допада (или нищо).
           </p>
           <div className="opts cols2">
-            <button className={`opt ${d.strength ? "selected" : ""}`} onClick={() => set({ strength: true })}>
-              <span className="t">💪 Да, добави ги</span>
+            <button className={`opt ${d.strength ? "selected" : ""}`} onClick={() => set({ strength: !d.strength })}>
+              <span className="t">💪 Силови</span>
+              <span className="d">1-2× седмично по ~30 мин, вкъщи</span>
             </button>
-            <button className={`opt ${!d.strength ? "selected" : ""}`} onClick={() => set({ strength: false })}>
-              <span className="t">Само {d.sport === "bike" ? "колелото" : d.sport === "both" ? "кардиото" : "бягането"}</span>
+            <button className={`opt ${d.stretching ? "selected" : ""}`} onClick={() => set({ stretching: !d.stretching })}>
+              <span className="t">🧘 Стречинг</span>
+              <span className="d">2× седмично по ~12 мин, след тренировка</span>
             </button>
           </div>
+
+          {d.strength && (
+            <>
+              <h2 className="mt">Къде ще правиш силовите?</h2>
+              <div className="opts">
+                {([
+                  ["home", "🏠 Вкъщи, без екипировка", "Собствено тегло — раница с книги върши работа"],
+                  ["dumbbells", "🏠 Вкъщи, имам дъмбели", "Дъмбели/пудовка — по-силен стимул от собственото тегло"],
+                  ["gym", "🏋️ Във фитнес зала", "Щанги и машини — най-ефективното развитие на сила"],
+                ] as const).map(([v, t, sub]) => (
+                  <button key={v} className={`opt ${d.strengthSetting === v ? "selected" : ""}`}
+                    onClick={() => set({ strengthSetting: v })}>
+                    <span className="t">{t}</span>
+                    <span className="d">{sub}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </>
       )}
 
@@ -367,7 +440,9 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
               <div className="opts">
                 {([["ftp", "⚡ Вдигане на FTP", "Повече мощност на прага — по-бърз навсякъде"],
                   ["endurance", "🛣️ Издръжливост", "По-дълги карания без да гориш"],
-                  ["vo2max", "🫁 VO₂max", "Вдигане на аеробния таван"]] as const).map(([v, t, sub]) => (
+                  ["vo2max", "🫁 VO₂max", "Вдигане на аеробния таван"],
+                  ["general", "🎯 Поддържане на форма", "Балансирана седмица без тежки блокове — стабилно добра кондиция"],
+                  ["mixed", "🔄 Всичко по малко", "Редуване на sweet spot, VO₂max и праг — развива и трите системи"]] as const).map(([v, t, sub]) => (
                   <button key={v} className={`opt ${d.bikeGoalType === v ? "selected" : ""}`} onClick={() => set({ bikeGoalType: v })}>
                     <span className="t">{t}</span>
                     <span className="d">{sub}</span>

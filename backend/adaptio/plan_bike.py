@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from .models import (BikeGoalType, Plan, PlanWeek, Profile, Segment,
                      SegmentType, TargetKind, Workout)
-from .planning import phase_for_week, place_days, plan_length_weeks, week_hours
+from .planning import level_params, phase_for_week, place_days, plan_length_weeks, week_hours
 from .zones import LTHR_ZONES, MAXHR_ZONES, resolve_zones
 
 # RPE equivalents per power zone (Borg CR10-ish)
@@ -161,11 +161,12 @@ def generate_bike_plan(profile: Profile) -> Plan:
         )
 
     bike_share = 1.0 if profile.sport.value == "bike" else 0.5
+    lp = level_params(profile)
     weeks: list[PlanWeek] = []
     workouts: list[Workout] = []
 
     for w in range(1, total_weeks + 1):
-        phase = phase_for_week(w, total_weeks, has_race, profile.currently_training)
+        phase = phase_for_week(w, total_weeks, has_race, lp["base_share"])
         hours = week_hours(profile, w, total_weeks, phase) * bike_share
         minutes = round(hours * 60)
         n_rides = max(2, min(6, round(minutes / 65)))
@@ -175,8 +176,9 @@ def generate_bike_plan(profile: Profile) -> Plan:
         step = max(0, (w - 1) - (w - 1) // 4)
 
         n_quality = 0 if phase == "taper" else (1 if phase in ("base", "recovery") or n_rides <= 3 else 2)
-        if goal_type == BikeGoalType.endurance:
+        if goal_type in (BikeGoalType.endurance, BikeGoalType.general):
             n_quality = min(n_quality, 1)
+        n_quality = min(n_quality, lp["max_quality"])
 
         long_min = max(45, min(round(minutes * 0.4), 240))
         rest_min = max(0, minutes - long_min)
@@ -188,6 +190,7 @@ def generate_bike_plan(profile: Profile) -> Plan:
             quality_days = [other_days[0], other_days[-1]]
 
         wk: list[Workout] = []
+        quality_slot = 0
         for d in other_days:
             if d in quality_days:
                 if goal_type == BikeGoalType.vo2max and phase in ("build", "peak"):
@@ -197,8 +200,24 @@ def generate_bike_plan(profile: Profile) -> Plan:
                 elif goal_type == BikeGoalType.endurance:
                     wk.append(_endurance_ride(tg, w, d, per_ride, name="Темпо + сила",
                                               low_cadence=True))
+                elif goal_type == BikeGoalType.general:
+                    # maintenance: one rotating stimulus, never a hard block
+                    wk.append(_sweet_spot(tg, w, d, min(step, 3)) if w % 2
+                              else _endurance_ride(tg, w, d, per_ride, name="Темпо + сила",
+                                                   low_cadence=True))
+                elif goal_type == BikeGoalType.mixed:
+                    # rotate all three systems across the plan; recovery weeks
+                    # keep only the mildest stimulus
+                    if phase == "build":
+                        wk.append(_vo2(tg, w, d, step) if (w + quality_slot) % 2
+                                  else _sweet_spot(tg, w, d, step))
+                    elif phase == "peak":
+                        wk.append(_threshold(tg, w, d, step))
+                    else:  # base, recovery
+                        wk.append(_sweet_spot(tg, w, d, step))
                 else:
                     wk.append(_sweet_spot(tg, w, d, step))
+                quality_slot += 1
             elif phase == "recovery" and len(wk) == 0:
                 wk.append(_recovery_spin(tg, w, d))
             else:
@@ -220,11 +239,14 @@ def generate_bike_plan(profile: Profile) -> Plan:
 
 
 def generate_plan(profile: Profile) -> Plan:
-    """Entry point: run, bike, or interleaved both (+ optional strength)."""
+    """Entry point: run, bike, or interleaved both (+ optional extras)."""
     plan = _generate_cardio_plan(profile)
     if profile.strength_enabled:
         from .strength import add_strength
         add_strength(plan, profile)
+    if profile.stretching_enabled:
+        from .stretching import add_stretching
+        add_stretching(plan, profile)
     return plan
 
 
