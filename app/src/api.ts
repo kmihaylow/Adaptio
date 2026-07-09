@@ -1,4 +1,4 @@
-import type { Dashboard, Plan, Profile, Workout } from "./types";
+import type { Dashboard, LastAnalysis, Plan, Profile, Workout } from "./types";
 
 const TOKEN_KEY = "adaptio_token";
 export const getToken = () => localStorage.getItem(TOKEN_KEY);
@@ -93,9 +93,36 @@ export const api = {
     }),
   intervalsStatus: () => req<{ connected: boolean }>("/api/integrations/intervals"),
   syncActivities: () =>
-    req<{ synced: number; matched: { workout: string; activity: string; date: string }[] }>(
+    req<{ synced: number; matched: { workout: string; activity: string; date: string }[]; messages: string[] }>(
       "/api/sync/activities", { method: "POST" },
     ),
+  uploadActivity: async (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const token = getToken();
+    const r = await fetch("/api/sync/upload", {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: fd,
+    });
+    if (!r.ok) {
+      let detail = `Грешка ${r.status}`;
+      try { const j = await r.json(); if (j.detail) detail = j.detail; } catch {}
+      throw new Error(detail);
+    }
+    return r.json() as Promise<{ synced: number; messages: string[] }>;
+  },
+  analysisLast: () => req<LastAnalysis>("/api/analysis/last"),
+  analysisAI: () =>
+    req<{ verdict: string; execution_score: number; strengths: string[];
+          improvements: string[]; next_advice: string }>(
+      "/api/analysis/last/ai", { method: "POST" },
+    ),
+  adjustTime: (id: number, factor: number) =>
+    req<{ ok: boolean; duration_min: number }>(`/api/workouts/${id}/time`, {
+      method: "POST",
+      body: JSON.stringify({ factor }),
+    }),
   pushWeek: (week: number) =>
     req<{ pushed: number }>(`/api/integrations/intervals/push-week/${week}`, { method: "POST" }),
   coachReview: (note: string) =>

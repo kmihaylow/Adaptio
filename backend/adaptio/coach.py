@@ -38,6 +38,51 @@ REVIEW_SCHEMA = {
 }
 
 
+ANALYSIS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "verdict": {"type": "string", "description": "One-line overall verdict, Bulgarian"},
+        "execution_score": {"type": "integer", "minimum": 1, "maximum": 10,
+                            "description": "How well the session matched its purpose"},
+        "strengths": {"type": "array", "items": {"type": "string"},
+                      "description": "2-3 things done well, Bulgarian"},
+        "improvements": {"type": "array", "items": {"type": "string"},
+                         "description": "1-3 concrete things to improve, Bulgarian"},
+        "next_advice": {"type": "string", "description": "What this means for the next sessions, Bulgarian"},
+    },
+    "required": ["verdict", "execution_score", "strengths", "improvements", "next_advice"],
+    "additionalProperties": False,
+}
+
+
+def analyze_activity(digest: dict) -> dict:
+    """Deep single-activity review — one compact Claude call, button-triggered.
+
+    `digest` carries the planned workout summary, the actual numbers and the
+    athlete's zones — a dozen numbers, no raw streams (token frugality)."""
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        raise RuntimeError("ANTHROPIC_API_KEY not set — AI analysis unavailable")
+
+    client = anthropic.Anthropic()
+    user = (
+        "Analyze this single completed session like a coach reviewing an athlete's day. "
+        "Judge execution against the session's PURPOSE (an easy run done too fast is a "
+        "miss, not a win). Be specific with the numbers you are given.\n"
+        f"{json.dumps(digest, ensure_ascii=False)}"
+    )
+    response = client.messages.create(
+        model=CLAUDE_MODEL,
+        max_tokens=1024,
+        system=SYSTEM,
+        output_config={"format": {"type": "json_schema", "schema": ANALYSIS_SCHEMA}},
+        messages=[{"role": "user", "content": user}],
+    )
+    if response.stop_reason == "refusal":
+        raise RuntimeError("AI analysis declined the request")
+    text = next(b.text for b in response.content if b.type == "text")
+    return json.loads(text)
+
+
 def weekly_review(profile_digest: dict, ratings: list[dict],
                   wellness: list[dict] | None, user_note: str = "") -> dict:
     """One compact Claude call. Raises RuntimeError if no API key configured."""

@@ -36,6 +36,7 @@ export interface Profile {
   currently_training: boolean;
   training_level?: "beginner" | "occasional" | "regular" | "athlete" | null;
   strength_enabled: boolean;
+  strength_setting?: "home" | "dumbbells" | "gym";
   stretching_enabled: boolean;
   equipment: Equipment;
   goal: Goal;
@@ -47,6 +48,21 @@ export interface Exercise {
   reps: string;
   note: string;
   demo_url: string;
+}
+
+export interface ComparisonRow {
+  metric: string;
+  planned: string;
+  actual: string;
+  verdict: "ok" | "over" | "under";
+  comment: string;
+}
+
+export interface LastAnalysis {
+  workout: { id: number; name: string; kind: string; sport: string; date: string;
+             duration_min: number; description: string };
+  actual: ActualActivity;
+  comparison: ComparisonRow[];
 }
 
 export interface WeeklyProgress {

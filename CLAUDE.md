@@ -70,7 +70,11 @@ prompts.
 1. Hosted deploy (Fly.io/Railway + Netlify); upgrade session auth to Supabase/FastAPI-Users.
 2. Capacitor wrap of `app/` for App Store / Google Play.
 3. ~~Auto-import completed activities from intervals.icu~~ done: activity_sync.py,
-   POST /api/sync/activities, auto-runs on dashboard load.
+   POST /api/sync/activities, auto-runs on dashboard load. Manual .tcx/.gpx
+   upload (activity_upload.py) + last-activity analysis (deterministic
+   comparison + coach.analyze_activity Claude call) + deviation rebalancing
+   (adaptation.rebalance_after_actual) + daily time check
+   (adaptation.scale_workout_time) — groundwork for the GARMIN COACH merge.
 4. ~~Strength workouts~~ done: strength.py (opt-in at onboarding, sport-specific
    catalog, max 2/wk on free days, never before quality/long, YouTube demo links).
 5. Direct Garmin Connect Developer Program integration (application pending — Garmin paused new requests mid-2026).

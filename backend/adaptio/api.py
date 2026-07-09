@@ -5,12 +5,12 @@ from __future__ import annotations
 import datetime as dt
 from typing import Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
-from . import activity_sync, adaptation, auth, coach, db, zwo
+from . import activity_sync, activity_upload, adaptation, auth, coach, db, zwo
 from .auth import current_user
 from .intervals import IntervalsClient, workout_to_intervals_text
 from .models import Profile, WorkoutRating
@@ -266,6 +266,129 @@ def dashboard(user: str = Depends(current_user)):
     }
 
 
+# ------------------------------------------------------------- last-activity
+
+def _primary_target(wo: dict) -> dict | None:
+    """The dominant work segment — what the session was actually about."""
+    segs = [s for s in wo.get("segments", []) if s["type"] in ("steady", "interval_on")]
+    if not segs:
+        return None
+    work = [s for s in segs if s["type"] == "interval_on"] or segs
+    main = max(work, key=lambda s: s["duration_s"])
+    return main
+
+
+def _fmt_pace(s: float) -> str:
+    return f"{int(s) // 60}:{int(s) % 60:02d}"
+
+
+def _compare_plan_actual(wo: dict, zones: dict) -> list[dict]:
+    """Deterministic coach checks: one row per metric we can actually judge."""
+    act = wo["actual"]
+    rows: list[dict] = []
+
+    planned_min, actual_min = wo["duration_min"], act.get("moving_time_min")
+    if actual_min:
+        r = actual_min / max(1, planned_min)
+        verdict = "ok" if 0.85 <= r <= 1.15 else ("over" if r > 1.15 else "under")
+        comment = {"ok": "Продължителността съвпада с плана.",
+                   "over": "Значително по-дълго от планираното.",
+                   "under": "По-кратко от планираното."}[verdict]
+        rows.append({"metric": "Продължителност", "planned": f"{planned_min} мин",
+                     "actual": f"{actual_min} мин", "verdict": verdict, "comment": comment})
+
+    main = _primary_target(wo)
+    if main and act.get("pace_s_per_km") and main["target_kind"] == "pace":
+        pace = act["pace_s_per_km"]
+        slow, fast = main["low"], main["high"]  # s/km: low = slower bound
+        if pace < fast - 5:
+            verdict, comment = "over", ("По-бързо от целевото темпо. Ако това е било лека тренировка — "
+                                        "тя не е изпълнила целта си: лекото трябва да е леко.")
+        elif pace > slow + 10:
+            verdict, comment = "under", "По-бавно от целевия диапазон — възможно умора, терен или горещина."
+        else:
+            verdict, comment = "ok", "Темпото е точно в целевата зона. Дисциплинирано изпълнение."
+        rows.append({"metric": "Темпо", "planned": f"{_fmt_pace(slow)}–{_fmt_pace(fast)}/км",
+                     "actual": f"{_fmt_pace(pace)}/км", "verdict": verdict, "comment": comment})
+
+    if main and act.get("avg_watts") and main["target_kind"] == "power":
+        ftp = zones.get("ftp_w")
+        if ftp:
+            lo, hi = round(main["low"] * ftp), round(main["high"] * ftp)
+            w = act["avg_watts"]
+            verdict = "ok" if lo * 0.93 <= w <= hi * 1.07 else ("over" if w > hi else "under")
+            comment = {"ok": "Мощността е в целевия диапазон.",
+                       "over": "Над целта — внимавай да не гориш дните за възстановяване.",
+                       "under": "Под целевия диапазон — умора или нужда от нов FTP тест."}[verdict]
+            rows.append({"metric": "Мощност", "planned": f"{lo}–{hi}W",
+                         "actual": f"{round(w)}W", "verdict": verdict, "comment": comment})
+
+    if act.get("avg_hr") and wo["kind"] in ("endurance", "long", "recovery"):
+        z2 = zones.get("hr_bpm", {}).get("z2_endurance")
+        if z2:
+            hr = act["avg_hr"]
+            verdict = "ok" if hr <= z2[1] + 5 else "over"
+            comment = ("Пулсът е в аеробната зона — точно това гради базата." if verdict == "ok"
+                       else f"Среден пулс {round(hr)} при Z2 таван ~{z2[1]} — лекото е било твърде бързо. "
+                            "Най-честата грешка на аматьора: забави и базата ще расте по-бързо.")
+            rows.append({"metric": "Пулс", "planned": f"Z2: {z2[0]}–{z2[1]} уд/мин",
+                         "actual": f"{round(act['avg_hr'])} уд/мин", "verdict": verdict, "comment": comment})
+
+    if act.get("load") and wo.get("load_hint"):
+        r = act["load"] / wo["load_hint"]
+        verdict = "ok" if 0.7 <= r <= 1.3 else ("over" if r > 1.3 else "under")
+        rows.append({"metric": "Натоварване (TSS)", "planned": str(wo["load_hint"]),
+                     "actual": str(act["load"]), "verdict": verdict,
+                     "comment": "Общият стрес съответства на плана." if verdict == "ok"
+                     else "Общият стрес се разминава с плана — виж горните редове защо."})
+    return rows
+
+
+def _last_actual(user: str):
+    row = db.active_plan(user)
+    if not row:
+        raise HTTPException(404, "Няма активен план.")
+    _, meta, workouts = row
+    workouts = _with_dates(meta, workouts)
+    with_actual = [w for w in workouts if w.get("actual")]
+    if not with_actual:
+        raise HTTPException(404, "Още няма синхронизирана тренировка — свържи intervals.icu или качи файл.")
+    wo = max(with_actual, key=lambda w: w["date"])
+    return wo, meta
+
+
+@app.get("/api/analysis/last")
+def analysis_last(user: str = Depends(current_user)):
+    wo, meta = _last_actual(user)
+    return {
+        "workout": {k: wo[k] for k in ("id", "name", "kind", "sport", "date",
+                                       "duration_min", "description")},
+        "actual": wo["actual"],
+        "comparison": _compare_plan_actual(wo, meta.get("zones", {})),
+    }
+
+
+@app.post("/api/analysis/last/ai")
+def analysis_last_ai(user: str = Depends(current_user)):
+    """Deep coach review of the last completed session — one Claude call."""
+    wo, meta = _last_actual(user)
+    main = _primary_target(wo)
+    digest = {
+        "session": {"name": wo["name"], "kind": wo["kind"], "sport": wo["sport"],
+                    "planned_min": wo["duration_min"],
+                    "purpose": wo.get("description", "")[:160],
+                    "main_target": main},
+        "actual": wo["actual"],
+        "deterministic_checks": _compare_plan_actual(wo, meta.get("zones", {})),
+        "zones": {k: v for k, v in meta.get("zones", {}).items()
+                  if k in ("vdot", "ftp_w", "max_hr_bpm", "w_per_kg", "bmi")},
+    }
+    try:
+        return coach.analyze_activity(digest)
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+
+
 # ----------------------------------------------------------------- workouts
 
 @app.get("/api/workouts/today")
@@ -279,6 +402,28 @@ def today(user: str = Depends(current_user)):
     upcoming = sorted((w for w in workouts if w["date"] > today_iso and w["status"] == "planned"),
                       key=lambda w: w["date"])[:3]
     return {"today": todays, "upcoming": upcoming, "zones": meta.get("zones", {})}
+
+
+class TimeAdjust(BaseModel):
+    factor: float = Field(..., ge=0.5, le=1.5)  # 0.7 = short on time, 1.3 = extra time
+
+
+@app.post("/api/workouts/{workout_id}/time")
+def adjust_time(workout_id: int, body: TimeAdjust, user: str = Depends(current_user)):
+    """Fit today's session into the time the athlete actually has: quality
+    intervals stay, easy volume shrinks/grows (изискване т.3)."""
+    wo = db.get_workout(user, workout_id)
+    if not wo:
+        raise HTTPException(404, "Няма такава тренировка.")
+    if wo["status"] != "planned":
+        raise HTTPException(400, "Само планирана тренировка може да се преоразмери.")
+    if wo["sport"] not in ("run", "bike"):
+        raise HTTPException(400, "Преоразмеряват се само кардио тренировките.")
+    from .models import Workout
+    m = Workout.model_validate({k: v for k, v in wo.items() if k != "plan_created"})
+    adaptation.scale_workout_time(m, body.factor)
+    db.update_workout(workout_id, data=m.model_dump(mode="json"))
+    return {"ok": True, "duration_min": m.duration_min}
 
 
 class StatusUpdate(BaseModel):
@@ -337,6 +482,24 @@ def workout_zwo(workout_id: int, user: str = Depends(current_user)):
 
 # ------------------------------------------------------- activity auto-sync
 
+def _apply_matches(workouts: list[dict], acts: list[dict]) -> tuple[list, list[str]]:
+    """Shared by auto-sync and manual upload: persist matches, mark done and
+    rebalance the upcoming plan when the actual deviates a lot (изискване т.4)."""
+    from .models import Workout
+    pairs = activity_sync.match_activities(workouts, acts)
+    messages: list[str] = []
+    for wo, act in pairs:
+        wo["actual"] = act
+        db.update_workout(wo["id"], data=wo, status="done")
+        upcoming = [Workout.model_validate(w) for w in workouts
+                    if w["status"] == "planned" and w["id"] != wo["id"]]
+        changed, msgs = adaptation.rebalance_after_actual(upcoming, wo, act)
+        for m in changed:
+            db.update_workout(m.id, data=m.model_dump(mode="json"))
+        messages.extend(msgs)
+    return pairs, messages
+
+
 @app.post("/api/sync/activities")
 def sync_activities(user: str = Depends(current_user)):
     """Pull recent completed activities from intervals.icu and tick off the
@@ -354,14 +517,45 @@ def sync_activities(user: str = Depends(current_user)):
         acts = client.activities()
     except Exception:
         raise HTTPException(502, "intervals.icu не отговори — опитай пак по-късно.")
-    pairs = activity_sync.match_activities(workouts, acts)
-    for wo, act in pairs:
-        wo["actual"] = act
-        db.update_workout(wo["id"], data=wo, status="done")
+    pairs, messages = _apply_matches(workouts, acts)
     return {
         "synced": len(pairs),
         "matched": [{"workout_id": w["id"], "workout": w["name"],
                      "activity": a["name"], "date": a["date"]} for w, a in pairs],
+        "messages": messages,
+    }
+
+
+@app.post("/api/sync/upload")
+async def upload_activity(file: UploadFile = File(...), user: str = Depends(current_user)):
+    """Manual .tcx/.gpx upload — the fallback path when intervals.icu isn't
+    connected (изискване т.2, стъпка към GARMIN COACH сливането)."""
+    raw = await file.read()
+    if len(raw) > 25 * 1024 * 1024:
+        raise HTTPException(400, "Файлът е твърде голям (макс. 25 MB).")
+    try:
+        act = activity_upload.parse_activity_file(file.filename or "activity", raw)
+    except activity_upload.UnsupportedFile as e:
+        raise HTTPException(400, str(e))
+    except Exception:
+        raise HTTPException(400, "Файлът не можа да бъде прочетен — увери се, че е валиден TCX/GPX експорт.")
+    row = db.active_plan(user)
+    if not row:
+        raise HTTPException(404, "Няма активен план.")
+    _, meta, workouts = row
+    workouts = _with_dates(meta, workouts)
+    pairs, messages = _apply_matches(workouts, [act])
+    if not pairs:
+        messages.append(
+            f"Файлът е прочетен ({act['moving_time_min']} мин, {act['date']}), но няма "
+            "планирана тренировка от същия спорт на тази дата, която да отбележа."
+        )
+    return {
+        "synced": len(pairs),
+        "activity": act,
+        "matched": [{"workout_id": w["id"], "workout": w["name"], "date": a["date"]}
+                    for w, a in pairs],
+        "messages": messages,
     }
 
 

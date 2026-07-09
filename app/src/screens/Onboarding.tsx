@@ -39,6 +39,7 @@ type Draft = {
   maxHr: string; restingHr: string; vo2max: string; ftp: string; lthr: string;
   raceDist: string; raceMin: string; raceSec: string;
   weeklyHours: number; days: number[]; level: string; strength: boolean; stretching: boolean;
+  strengthSetting: "home" | "dumbbells" | "gym";
   hasRace: boolean; raceName: string; raceDate: string; weeks: number;
   runGoalType: string; runDistance: string; targetH: string; targetM: string; targetS: string;
   paceM: string; paceS: string; bikeGoalType: string;
@@ -50,6 +51,7 @@ const init: Draft = {
   maxHr: "", restingHr: "", vo2max: "", ftp: "", lthr: "",
   raceDist: "", raceMin: "", raceSec: "",
   weeklyHours: 5, days: [0, 2, 4, 6], level: "", strength: false, stretching: false,
+  strengthSetting: "home",
   hasRace: false, raceName: "", raceDate: "", weeks: 8,
   runGoalType: "race_time", runDistance: "10k", targetH: "0", targetM: "50", targetS: "0",
   paceM: "5", paceS: "30", bikeGoalType: "ftp",
@@ -106,6 +108,7 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
       training_level: d.level as any,
       currently_training: d.level === "regular" || d.level === "athlete",
       strength_enabled: d.strength,
+      strength_setting: d.strengthSetting,
       stretching_enabled: d.stretching,
       equipment: d.eq,
       goal: {
@@ -333,6 +336,25 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
               <span className="d">2× седмично по ~12 мин, след тренировка</span>
             </button>
           </div>
+
+          {d.strength && (
+            <>
+              <h2 className="mt">Къде ще правиш силовите?</h2>
+              <div className="opts">
+                {([
+                  ["home", "🏠 Вкъщи, без екипировка", "Собствено тегло — раница с книги върши работа"],
+                  ["dumbbells", "🏠 Вкъщи, имам дъмбели", "Дъмбели/пудовка — по-силен стимул от собственото тегло"],
+                  ["gym", "🏋️ Във фитнес зала", "Щанги и машини — най-ефективното развитие на сила"],
+                ] as const).map(([v, t, sub]) => (
+                  <button key={v} className={`opt ${d.strengthSetting === v ? "selected" : ""}`}
+                    onClick={() => set({ strengthSetting: v })}>
+                    <span className="t">{t}</span>
+                    <span className="d">{sub}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </>
       )}
 

@@ -36,6 +36,13 @@ class BikeGoalType(str, Enum):
     mixed = "mixed"              # develop all three systems in rotation
 
 
+class StrengthSetting(str, Enum):
+    """Where/with what the athlete does strength work — picks the catalog."""
+    home = "home"                # bodyweight only
+    dumbbells = "dumbbells"      # dumbbells / kettlebell at home
+    gym = "gym"                  # full gym access
+
+
 class TrainingLevel(str, Enum):
     """Training background — decides how aggressively the plan starts and ramps."""
     beginner = "beginner"        # not training now / just starting
@@ -121,6 +128,7 @@ class Profile(BaseModel):
     currently_training: bool = False  # legacy bool; training_level supersedes it
     training_level: Optional[TrainingLevel] = None
     strength_enabled: bool = False    # add 1-2 short strength sessions weekly?
+    strength_setting: StrengthSetting = StrengthSetting.home
     stretching_enabled: bool = False  # add short stretching/mobility sessions?
 
     @property

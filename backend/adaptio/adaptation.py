@@ -51,6 +51,72 @@ def apply_adjustment(workouts: list[Workout], factor: float, quality_only: bool 
     return changed
 
 
+def scale_workout_time(wo: Workout, factor: float) -> None:
+    """Fit a workout into more/less available time WITHOUT touching intensity.
+
+    Coach logic for a short day: the quality intervals are the point of the
+    session — keep them; trim warmup/cooldown/steady volume instead. With
+    extra time, extend the easy volume (more Z2 is always useful)."""
+    factor = max(0.5, min(1.5, factor))
+    is_flex = lambda s: s.type.value in ("warmup", "cooldown", "steady")
+    flexible = [s for s in wo.segments if is_flex(s)]
+    fixed_s = sum(s.duration_s for s in wo.segments if not is_flex(s))
+    flex_s = sum(s.duration_s for s in flexible)
+    old_total = fixed_s + flex_s
+    if not old_total:
+        wo.duration_min = max(10, round(wo.duration_min * factor))
+        return
+    target = old_total * factor
+    if flex_s:
+        flex_scale = max(0.35, (target - fixed_s) / flex_s)
+        for s in flexible:
+            s.duration_s = max(180, round(s.duration_s * flex_scale))
+    new_total = sum(s.duration_s for s in wo.segments)
+    wo.load_hint = round(wo.load_hint * new_total / old_total)
+    wo.duration_min = round(new_total / 60)
+
+
+def rebalance_after_actual(upcoming: list[Workout], done_workout: dict,
+                           actual: dict) -> tuple[list[Workout], list[str]]:
+    """React when what the athlete DID differs a lot from what was planned.
+
+    Returns (changed_workouts_to_persist, coach_messages). Rules:
+    - did much more than planned (≥140% duration/load) → the next few days'
+      quality sessions ease ~5% so the extra load doesn't stack into a hole;
+    - a quality session cut short (≤60%) → no punishment, but say honestly
+      that the stimulus was missed and the next one matters.
+    """
+    planned_min = done_workout.get("duration_min") or 0
+    actual_min = actual.get("moving_time_min") or 0
+    if not planned_min or not actual_min:
+        return [], []
+    ratio = actual_min / planned_min
+    planned_load, actual_load = done_workout.get("load_hint"), actual.get("load")
+    if planned_load and actual_load:
+        ratio = max(ratio, actual_load / planned_load)
+
+    messages: list[str] = []
+    changed: list[Workout] = []
+    if ratio >= 1.4:
+        week = done_workout["plan_week"]
+        targets = [w for w in upcoming
+                   if w.status == "planned" and week <= w.plan_week <= week + 1]
+        if apply_adjustment(targets, 0.95):
+            changed = targets
+            messages.append(
+                f"Тренировката е излязла ~{round(ratio * 100)}% от планираното — браво за мотивацията, "
+                "но натоварването се трупа. Облекчих леко качествените тренировки в следващите дни, "
+                "за да не платиш сметката с умора."
+            )
+    elif ratio <= 0.6 and done_workout.get("kind") in QUALITY_KINDS:
+        messages.append(
+            "Днешната качествена тренировка е останала доста по-кратка от плана. Случва се — "
+            "но стимулът липсва, затова гледай следващата качествена сесия да е пълноценна. "
+            "Ако времето е проблемът, кажи ми в деня колко имаш и ще преразпределя."
+        )
+    return changed, messages
+
+
 def evaluate_ratings(recent: list[dict]) -> tuple[float | None, str | None]:
     """Decide on an adjustment from the rating history (newest last).
 
