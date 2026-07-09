@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from .models import (Goal, Plan, PlanWeek, Profile, RunDistance, RunGoalType,
                      Segment, SegmentType, TargetKind, Workout)
-from .planning import (level_params, phase_for_week, place_days,
-                       plan_length_weeks, week_available_days, week_hours)
+from .planning import (level_params, phase_for_week, place_week_days,
+                       plan_length_weeks, week_hours)
 from .zones import resolve_zones
 
 EASY_PACE_HR_NOTE = "Говорно темпо — трябва да можеш да водиш разговор (Z2)."
@@ -124,7 +124,7 @@ def generate_run_plan(profile: Profile) -> Plan:
         hours = week_hours(profile, w, total_weeks, phase) * run_share
         minutes = round(hours * 60)
         n_runs = max(2, min(6, round(minutes / 50)))
-        days = place_days(week_available_days(profile, w), n_runs)
+        days = place_week_days(profile, w, n_runs)
         long_day = days[-1]
         quality_days = []
         if phase != "taper" and n_runs >= 3:

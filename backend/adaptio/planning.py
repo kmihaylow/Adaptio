@@ -118,6 +118,30 @@ def week_available_days(profile: Profile, week: int) -> list[int]:
     return profile.available_days
 
 
+def ensure_day_included(days: list[int], must: int) -> list[int]:
+    """Guarantee `must` is one of the training days by swapping in the nearest
+    chosen day. Used to honor "днес може тренировка": choosing it means the
+    athlete EXPECTS to train today, not merely that today isn't forbidden."""
+    if must in days or not days:
+        return days
+    long_day = days[-1]
+    candidates = [d for d in days if d != long_day] or [long_day]
+    nearest = min(candidates, key=lambda d: min((d - must) % 7, (must - d) % 7))
+    return sorted([d for d in days if d != nearest] + [must])
+
+
+def place_week_days(profile: Profile, week: int, n_sessions: int) -> list[int]:
+    """place_days + the week-1 "днес" rules: rest_today removes today,
+    otherwise today is guaranteed a session when it's an available day."""
+    avail = week_available_days(profile, week)
+    days = place_days(avail, n_sessions)
+    if week == 1 and not profile.rest_today:
+        today_wd = dt.date.today().weekday()
+        if today_wd in avail:
+            days = ensure_day_included(days, today_wd)
+    return days
+
+
 def place_days(available: list[int], n_sessions: int, long_day_pref: tuple[int, ...] = (6, 5)) -> list[int]:
     """Pick training days: long session on the weekend when possible, quality
     sessions spread out so hard days never stack back-to-back."""
